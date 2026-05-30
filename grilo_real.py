@@ -1,104 +1,65 @@
-# -*- coding: utf-8 -*-
-import datetime
-import threading
-import time
-from fastapi import FastAPI
-import requests
-import uvicorn
+import os
+import logging
+import random
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, Request, Response
+from telegram import Update
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
-app = FastAPI()
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
+)
+logger = logging.getLogger(__name__)
 
-API_KEY = "647a516646bc551ffe6417e17739e883"
-HEADERS = {
-    "x-rapidapi-key": API_KEY,
-    "x-rapidapi-host": "v3.football.api-sports.io",
-}
+TOKEN = os.environ.get("TELEGRAM_TOKEN", "COLOQUE_SEU_TOKEN_AQUI")
+RENDER_URL = os.environ.get("RENDER_EXTERNAL_URL")
+CHAT_SINAIS_ID = os.environ.get("CHAT_SINAIS_ID", "COLOQUE_O_ID_DO_SEU_CANAL_OU_GRUPO_AQUI")
 
-LIGAS = [
-    "série a",
-    "série b",
-    "premier league",
-    "la liga",
-    "serie a",
-    "bundesliga",
-    "ligue 1",
-    "liga portugal",
-    "eredivisie",
-    "world cup",
-    "uefa champions league",
-    "uefa europa league",
-    "copa libertadores",
-    "copa sudamericana",
-]
+telegram_app = Application.builder().token(TOKEN).build()
 
-
-def buscar_partidas(modo="live"):
-    if modo == "live":
-        url = "https://api-sports.io"
-    else:
-        hoje = datetime.date.today().strftime("%Y-%m-%d")
-        url = f"https://api-sports.io{hoje}"
-
+async def enviar_sinal_automatico(context: ContextTypes.DEFAULT_TYPE) -> None:
+    ativos = ["MESA-1", "GRILO-3", "NUVEM-7"]
+    direcoes = ["🟢 ENTRADA CONFIRMADA: COMPRA", "🔴 ENTRADA CONFIRMADA: VENDA"]
+    ativo_escolhido = random.choice(ativos)
+    direcao_escolhida = random.choice(direcoes)
+    
+    mensagem_sinal = (
+        f"🚨 *NOVO SINAL GRILOBOT* 🦗\n\n"
+        f"📊 Ativo: `{ativo_escolhido}`\n"
+        f"⚡ Ação: {direcao_escolhida}\n"
+        f"🎯 Alvo sugerido: 2.0x\n\n"
+        f"⚠️ Gerencie seu risco!"
+    )
     try:
-        resposta = requests.get(url, headers=HEADERS, timeout=15)
-        if resposta.status_code == 200:
-            return resposta.json().get("response", [])
-    except:
-        pass
-    return []
+        await context.bot.send_message(chat_id=CHAT_SINAIS_ID, text=mensagem_sinal, parse_mode="Markdown")
+        logger.info("Sinal enviado com sucesso!")
+    except Exception as e:
+        logger.error(f"Erro ao enviar sinal: {e}")
 
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await update.message.reply_text("Olá! Eu sou o Grilobot. Monitorando sinais!")
 
-def loop_robo_grilo():
-    while True:
-        print("\n==================================================")
-        print("       ### ROBO GRILO V1 | MONITORAMENTO LIGAS     ")
-        print("==================================================")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    telegram_app.add_handler(CommandHandler("start", start))
+    if telegram_app.job_queue:
+        telegram_app.job_queue.run_repeating(enviar_sinal_automatico, interval=600, first=5)
+    await telegram_app.initialize()
+    await telegram_app.updater.initialize()
+    await telegram_app.bot.set_webhook(url=f"{RENDER_URL}/webhook")
+    yield
+    await telegram_app.updater.shutdown()
+    await telegram_app.uninitialize()
 
-        partidas = buscar_partidas("live")
-        tipo = "AO VIVO"
-
-        if not partidas:
-            partidas = buscar_partidas("agendados")
-            tipo = "AGENDADO DO DIA"
-
-        if not partidas:
-            print("Nenhuma partida encontrada na API para hoje.")
-        else:
-            encontrados = 0
-            for item in partidas:
-                liga_nome = item.get("league", {}).get("name", "")
-                if not any(L in liga_nome.lower() for L in LIGAS):
-                    continue
-
-                teams = item.get("teams", {})
-                goals = item.get("goals", {})
-                g_casa = goals.get("home") if goals.get("home") is not None else 0
-                g_fora = goals.get("away") if goals.get("away") is not None else 0
-
-                print(
-                    f"\n🏆 {item.get('league', {}).get('country', 'Mundo').upper()}: {liga_nome}"
-                )
-                print(
-                    f"⚽ [{tipo}]: {teams.get('home', {}).get('name')} {g_casa} x {g_fora} {teams.get('away', {}).get('name')}"
-                )
-                print("-" * 45)
-                print("📊 Passes Estimados: Fav: 410 | Zeb: 330")
-                print("🎯 Chutes no Gol: Fav: 5.0 | Zeb: 3.2")
-                print("📈 Chance de X2 (Zebra ou Empate): 65%")
-                print("==================================================")
-                encontrados += 1
-
-            if encontrados == 0:
-                print("Sem jogos das ligas selecionadas no momento.")
-
-        time.sleep(120)
-
+app = FastAPI(lifespan=lifespan)
 
 @app.get("/")
-def home():
-    return {"status": "Robo Grilo V1 Online"}
+async def root():
+    return {"status": "Grilobot gerador de sinais ativo!"}
 
-
-if __name__ == "__main__":
-    threading.Thread(target=loop_robo_grilo, daemon=True).start()
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+@app.post("/webhook")
+async def webhook_handler(request: Request):
+    json_data = await request.json()
+    update = Update.de_json(json_data, telegram_app.bot)
+    await telegram_app.process_update(update)
+    return Response(status_code=200)
