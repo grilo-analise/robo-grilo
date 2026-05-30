@@ -5,7 +5,7 @@ import json
 import random
 import telebot
 import requests
-from threading import Thread  # IMPORTAÇÃO DIRETA E SEGURA
+from threading import Thread
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify
 
@@ -82,13 +82,14 @@ def gerar_e_enviar_sinais():
                 f"=========================================="
             )
 
-            # Envia o sinal para o Telegram
             try:
-                bot.send_message(CHAT_ID, message=mensagem, parse_mode="Markdown")
+                # CORRIGIDO: Alterado para 'text=mensagem' (padrão correto da biblioteca telebot)
+                bot.send_message(CHAT_ID, text=mensagem, parse_mode="Markdown")
                 print(f"[SUCESSO] Sinal enviado para o Telegram: {time_casa} x {time_fora}")
             except Exception as env_err:
                 print(f"[ERRO TELEGRAM] Falha ao enviar para o chat {CHAT_ID}: {env_err}")
             
+            # Pausa curta para evitar bloqueio de SPAM do Telegram
             time.sleep(3)
 
     except Exception as e:
@@ -104,7 +105,9 @@ def disparar_sinais():
     return jsonify({"status": "Processamento de sinais iniciado"}), 200
 
 if __name__ == "__main__":
+    # Dispara os sinais automaticamente assim que o Render liga o servidor
     Thread(target=gerar_e_enviar_sinais).start()
     
+    # Vincula o Flask na porta correta do Render
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
