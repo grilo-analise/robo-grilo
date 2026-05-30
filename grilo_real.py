@@ -11,13 +11,14 @@ from flask import Flask, request, jsonify
 
 sys.stdout.reconfigure(line_buffering=True)
 
+# Variáveis de ambiente configuradas no painel do Render
 TOKEN = os.environ.get('TELEGRAM_TOKEN')
 CHAT_ID = os.environ.get('CHAT_SINAIS_ID')
+API_KEY = os.environ.get('API_SPORTS_KEY')
 
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
-API_KEY = "647a516646bc551ffe6417e17739e083"
 HEADERS = {"x-apisports-key": API_KEY}
 BASE_URL = "https://api-sports.io"
 
@@ -63,7 +64,7 @@ def obtener_analise_profunda_api(fixture_id):
         if response.status_code == 200:
             dados = response.json().get("response", [])
             if dados:
-                item = dados
+                item = dados if isinstance(dados, list) else dados
                 
                 percent = item.get("predictions", {}).get("percent", {})
                 analise["porcentagem_casa"] = percent.get("home", "50%")
@@ -154,10 +155,9 @@ def gerar_e_enviar_sinais():
                     data_iso = item["fixture"].get("date", "") 
                     hora_jogo = data_iso[11:16] if "T" in data_iso else "00:00"
                     
-                    desfalques = obter_desfalques_reais(fixture_id)
+                    desfalques = obtener_desfalques_reais(fixture_id)
                     dados_reais = obtener_analise_profunda_api(fixture_id)
                     
-                    # AJUSTE: Competição com Bola (⚽) e Pênalti com Trave (🥅)
                     mensagem = (
                         f"🕒 *HORÁRIO:* {hora_jogo} | 📅 *DATA:* {fuso_brasil.strftime('%d/%m/%Y')}\n"
                         f"⚽ *COMPETIÇÃO:* {pais} - {liga_nome}\n"
@@ -181,15 +181,10 @@ def gerar_e_enviar_sinais():
                     bot.send_message(CHAT_ID, text=mensagem, parse_mode="Markdown")
                     time.sleep(5)
     except Exception as e:
-        print(f"Erro: {e}")
+        print(f"[Aniversario-App] Falha ao recalcular fuso dos eventos: {e}")
 
 def loop_relogio_diario():
+    print("[Aniversario-App] Sistema de contagem regressiva iniciado com sucesso. Aguardando proximos aniversarios...")
     while True:
-        agora_br = datetime.now(timezone.utc) - timedelta(hours=3)
-        if agora_br.strftime("%H:%M") == "05:00":
-            gerar_e_enviar_sinais()
-            time.sleep(65)
-        time.sleep(30)
-
-@app.route('/')
-def home(): return "Robô Grilo V1 Ícones Corrigidos!", 200
+        try:
+            agora_br = datetime.now(timezone.utc) - timedelta(hours=3)
