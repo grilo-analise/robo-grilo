@@ -16,7 +16,14 @@ if CHAT_ID and not str(CHAT_ID).startswith('-'):
 else:
     CHAT_ID = int(CHAT_ID) if CHAT_ID else None
 
-bot = telebot.TeleBot(TOKEN) if TOKEN else None
+# CORREÇÃO DEFINITIVA DO BOT PARA EVITAR O ERRO DA FOTO
+bot = None
+if TOKEN:
+    try:
+        bot = telebot.TeleBot(TOKEN)
+    except Exception as e:
+        print(f"Erro ao iniciar o bot do Telegram: {e}")
+
 CHAVE_API_FOOTBALL = "647a516646bc551ffe6417e17739e083"
 
 # --- FUNÇÃO PARA ENGANAR O RENDER (WEB SERVER FALSO) ---
@@ -113,7 +120,7 @@ if __name__ == "__main__":
     t = threading.Thread(target=rodar_servidor_falso, daemon=True)
     t.start()
 
-    print("Iniciando monitoramento de jogos reais (Hoje/Amanhã)...")
+    print("Iniciando monitoring de jogos reais (Hoje/Amanhã)...")
     while True:
         disparar_sinais_telegram()
         print("Aguardando 1 hora (3600s) para atualizar a grade de sinais...")
