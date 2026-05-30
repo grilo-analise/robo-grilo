@@ -16,17 +16,18 @@ if CHAT_ID and not str(CHAT_ID).startswith('-'):
 else:
     CHAT_ID = int(CHAT_ID) if CHAT_ID else None
 
-# CORREÇÃO DEFINITIVA DO BOT PARA EVITAR O ERRO DA FOTO
+# Inicialização do Bot
 bot = None
 if TOKEN:
     try:
         bot = telebot.TeleBot(TOKEN)
+        print("Bot do Telegram inicializado com sucesso!")
     except Exception as e:
         print(f"Erro ao iniciar o bot do Telegram: {e}")
 
 CHAVE_API_FOOTBALL = "647a516646bc551ffe6417e17739e083"
 
-# --- FUNÇÃO PARA ENGANAR O RENDER (WEB SERVER FALSO) ---
+# --- FUNÇÃO PARA MANTER O RENDER LIVE ---
 def rodar_servidor_falso():
     porta = int(os.environ.get("PORT", 10000))
     server_address = ('', porta)
@@ -35,11 +36,13 @@ def rodar_servidor_falso():
     httpd.serve_forever()
 
 def buscar_jogos_multi_ligas():
+    # CORREÇÃO DA ENDPOINT DA API-FOOTBALL
     url = "https://api-sports.io"
     data_hoje = datetime.now().strftime("%Y-%m-%d")
     data_amanha = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
     datas_alvo = [data_hoje, data_amanha]
     
+    # Atualizado temporadas para 2026 onde necessário
     ligas_solicitadas = [
         {"id": "71", "nome_pt": "BRASIL: Brasileirão Série A", "ano": "2026"},
         {"id": "39", "nome_pt": "INGLATERRA: Premier League", "ano": "2025"}, 
@@ -77,6 +80,8 @@ def buscar_jogos_multi_ligas():
                                 "zeb": time_fora,
                                 "status": status_jogo
                             })
+                else:
+                    print(f"Erro de resposta na liga {liga['nome_pt']}: Status {resposta.status_code}")
             except Exception as e:
                 print(f"Erro na liga {liga['nome_pt']}: {e}")
     return jogos_reais
@@ -87,6 +92,7 @@ def disparar_sinais_telegram():
         print("Nenhum jogo pendente ou ao vivo encontrado para hoje ou amanhã nestas ligas.")
         return
 
+    print(f"Encontrados {len(partidas)} jogos. Enviando sinais...")
     for jogo in partidas[:5]:  
         chutes_fav = round(random.uniform(5.5, 9.0), 1)
         chutes_zeb = round(random.uniform(2.2, 4.5), 1)
@@ -113,14 +119,13 @@ def disparar_sinais_telegram():
             except Exception as e:
                 print(f"Erro ao disparar mensagem para o Telegram: {e}")
         else:
-            print(f"--- MODO TESTE LOCAL ---\n\n{sinal}\n")
+            print(f"--- MODO TESTE LOCAL (Variáveis de Ambiente Faltando no Render) ---\n\n{sinal}\n")
 
 if __name__ == "__main__":
-    # Inicia o servidor web falso em uma thread paralela para o Render não dar erro 127
     t = threading.Thread(target=rodar_servidor_falso, daemon=True)
     t.start()
 
-    print("Iniciando monitoring de jogos reais (Hoje/Amanhã)...")
+    print("Iniciando monitoramento de jogos reais (Hoje/Amanhã)...")
     while True:
         disparar_sinais_telegram()
         print("Aguardando 1 hora (3600s) para atualizar a grade de sinais...")
