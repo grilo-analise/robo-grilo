@@ -13,7 +13,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-TOKEN = os.environ.get("TELEGRAM_TOKEN", "COLOQUE_SEU_TOKEN_AQUI")
+TOKEN = os.environ.get("TELEGRAM_TOKEN", "8914776954:AAHi9WptHoTC-5V9sGpDyvBsxYR2DaARexo")
 RENDER_URL = os.environ.get("RENDER_EXTERNAL_URL")
 CHAT_SINAIS_ID = os.environ.get("CHAT_SINAIS_ID", "COLOQUE_O_ID_DO_SEU_CANAL_OU_GRUPO_AQUI")
 
