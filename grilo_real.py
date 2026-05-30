@@ -5,7 +5,7 @@ import json
 import random
 import telebot
 import requests
-import threading  # IMPORTAÇÃO CORRIGIDA AQUI
+from threading import Thread  # IMPORTAÇÃO DIRETA E SEGURA
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify
 
@@ -84,7 +84,7 @@ def gerar_e_enviar_sinais():
 
             # Envia o sinal para o Telegram
             try:
-                bot.send_message(CHAT_ID, mensagem, parse_mode="Markdown")
+                bot.send_message(CHAT_ID, message=mensagem, parse_mode="Markdown")
                 print(f"[SUCESSO] Sinal enviado para o Telegram: {time_casa} x {time_fora}")
             except Exception as env_err:
                 print(f"[ERRO TELEGRAM] Falha ao enviar para o chat {CHAT_ID}: {env_err}")
@@ -100,11 +100,11 @@ def home():
 
 @app.route('/disparar', methods=['POST'])
 def disparar_sinais():
-    threading.Thread(target=gerar_e_enviar_sinais).start()
+    Thread(target=gerar_e_enviar_sinais).start()
     return jsonify({"status": "Processamento de sinais iniciado"}), 200
 
 if __name__ == "__main__":
-    threading.Thread(target=gerar_e_enviar_sinais).start()
+    Thread(target=gerar_e_enviar_sinais).start()
     
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
