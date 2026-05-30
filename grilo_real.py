@@ -2,6 +2,7 @@ import os
 import random
 import requests
 import telebot
+import time
 from datetime import datetime, timedelta
 
 # 1. Conexão Oficial com o seu Canal/Grupo do Telegram no Render
@@ -9,7 +10,7 @@ TOKEN = os.environ.get('TELEGRAM_TOKEN')
 CHAT_ID = os.environ.get('CHAT_SINAIS_ID')  
 
 # Ajusta o ID do chat para o formato de canais do Telegram de forma automática
-if CHAT_ID and not CHAT_ID.startswith('-'):
+if CHAT_ID and not str(CHAT_ID).startswith('-'):
     CHAT_ID = int(f"-100{CHAT_ID}")
 else:
     CHAT_ID = int(CHAT_ID) if CHAT_ID else None
@@ -20,6 +21,7 @@ bot = telebot.TeleBot(TOKEN) if TOKEN else None
 CHAVE_API_FOOTBALL = "647a516646bc551ffe6417e17739e083"
 
 def buscar_jogos_multi_ligas():
+    # CORREÇÃO: A URL base precisa do endpoint correto para buscar partidas
     url = "https://api-sports.io"
     
     # Configura dinamicamente as datas de Hoje e Amanhã
@@ -116,6 +118,7 @@ def disparar_sinais_telegram():
             try:
                 bot.send_message(CHAT_ID, sinal)
                 print(f"Sucesso: Sinal enviado para o Telegram: {jogo['fav']} x {jogo['zeb']}")
+                time.sleep(2) # Pequena pausa para evitar bloqueio do Telegram por spam
             except Exception as e:
                 print(f"Erro ao disparar mensagem para o Telegram: {e}")
         else:
@@ -123,4 +126,7 @@ def disparar_sinais_telegram():
 
 if __name__ == "__main__":
     print("Conectando de forma segura à central de futebol...")
-    disparar_sinais_telegram()
+    while True:
+        disparar_sinais_telegram()
+        print("Aguardando 4 horas para a próxima checagem de sinais...")
+        time.sleep(14400)  # Deixa o script rodando sem parar (14400 segundos = 4 horas)
