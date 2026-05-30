@@ -22,7 +22,7 @@ telegram_app = Application.builder().token(TOKEN).build()
 # Nova função de sinais usando o loop nativo do Python (Sem bugs na nuvem!)
 async def enviar_sinal_automatico():
     while True:
-        await asyncio.sleep(600)  # Espera 10 minutos (600 segundos) para enviar o próximo sinal
+        await asyncio.sleep(60)  # Espera 10 minutos (600 segundos) para enviar o próximo sinal
         ativos = ["MESA-1", "GRILO-3", "NUVEM-7"]
         direcoes = ["🟢 ENTRADA CONFIRMADA: COMPRA", "🔴 ENTRADA CONFIRMADA: VENDA"]
         ativo_escolhido = random.choice(ativos)
