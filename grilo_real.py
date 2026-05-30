@@ -22,7 +22,7 @@ app = Flask(__name__)
 HEADERS = {"x-apisports-key": API_KEY}
 BASE_URL = "https://api-sports.io"
 
-# LIGAS DE ELITE (Garante cobertura total de dados estatísticos profundos)
+# LIGAS DE ELITE CORRIGIDAS (IDs válidos para a API-Sports)
 LIGAS_ELITE = [71, 72, 39, 140, 78, 135]
 
 def obtener_desfalques_reais(fixture_id):
