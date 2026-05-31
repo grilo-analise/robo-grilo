@@ -12,7 +12,7 @@ from flask import Flask, request, jsonify
 
 sys.stdout.reconfigure(line_buffering=True)
 
-# Coleta com fallback seguro
+# Coleta com fallback seguro das credenciais do Render
 TOKEN = os.environ.get('TELEGRAM_TOKEN', '').strip()
 CHAT_ID = os.environ.get('CHAT_SINAIS_ID', '').strip()
 API_KEY = os.environ.get('API_SPORTS_KEY', '').strip()
@@ -20,8 +20,15 @@ API_KEY = os.environ.get('API_SPORTS_KEY', '').strip()
 bot = telebot.TeleBot(TOKEN) if TOKEN else None
 app = Flask(__name__)
 
-# Suas ligas de elite mantidas exatamente iguais
-LIGAS_ELITE = [71, 72, 39, 140, 78, 135]
+# Lista expandida com mais ligas do mundo todo para garantir jogos reais todos os dias
+LIGAS_ATIVAS = [
+    71, 72, 73, 74,   # Brasileirão Série A, B, C e D
+    39, 140, 78, 135, # Ligas Europeias (Premier, LaLiga, Bundesliga, Serie A)
+    253, 255, 257,    # MLS (Estados Unidos) e ligas americanas
+    2, 3, 5, 4, 9,    # Champions League, Europa League, Libertadores, Copa América, Copa do Mundo
+    103, 106, 113,    # Ligas Sul-Americanas (Argentina, Chile, Colômbia)
+    283, 197, 218     # Outras ligas com alta frequência de jogos (Japão, México, etc.)
+]
 
 # Variáveis para controle inteligente de cache da API
 JOGOS_REAIS_CACHE = []
@@ -54,18 +61,21 @@ def buscar_jogos_reais_na_api():
                 return
                 
             todos_jogos = dados.get("response", [])
-            # Filtra os jogos reais usando estritamente a sua lista LIGAS_ELITE
-            jogos_filtrados = [j for j in todos_jogos if j.get("league", {}).get("id") in LIGAS_ELITE]
             
+            # Filtra os jogos reais usando a nossa lista expandida
+            jogos_filtrados = [j for j in todos_jogos if j.get("league", {}).get("id") in LIGAS_ATIVAS]
+            
+            # Se a lista ainda estiver vazia, pega qualquer jogo do dia para o bot nunca ficar parado
+            if not jogos_filtrados and todos_jogos:
+                jogos_filtrados = todos_jogos
+
             if jogos_filtrados:
-                # Embaralha para alternar os campeonatos enviados a cada 5 minutos
-                random.shuffle(jogos_filtrados)
+                random.shuffle(jogos_filtrados) # Embaralha para alternar os campeonatos
                 JOGOS_REAIS_CACHE = jogos_filtrados
                 INDICE_JOGO_ATUAL = 0
                 print(f"[API] Banco de dados real atualizado: {len(JOGOS_REAIS_CACHE)} jogos em cache.")
             else:
-                print("[API] Sem jogos reais para as ligas de elite selecionadas hoje.")
-                # Se não houver nada nas de elite, deixa a lista vazia para evitar simulações falsas
+                print("[API] Nenhum jogo real encontrado no mundo hoje.")
                 JOGOS_REAIS_CACHE = []
         else:
             print(f"[API ERRO HTTP] Código retornado: {response.status_code}")
@@ -92,7 +102,7 @@ def obter_dados_simulados():
         "h2h_historico": random.choice(["Equilibrado", "Vantagem Casa", "Vantagem Fora"]), 
         "ultimos_5_casa": random.choice(["V-E-V-D-E", "V-V-E-D-V", "E-D-V-V-E"]), 
         "ultimos_5_fora": random.choice(["E-V-D-D-V", "D-E-V-D-D", "E-E-V-D-E"]),
-        "conselho": "Dupla Chance (Casa ou Empate)"
+        "conselho": random.choice(["Dupla Chance (Casa ou Empate)", "Ambas Marcam (Sim)", "Mais de 1.5 Gols", "Handicap Mandante (+)"])
     }
 
 def gerar_e_enviar_sinais():
@@ -103,7 +113,6 @@ def gerar_e_enviar_sinais():
 
     fuso_brasil = datetime.now(timezone.utc) - timedelta(hours=3)
     
-    # Se o bot acabou de ligar, busca os jogos na API imediatamente
     if not JOGOS_REAIS_CACHE:
         buscar_jogos_reais_na_api()
         
@@ -114,7 +123,7 @@ def gerar_e_enviar_sinais():
     # Controle rotativo para enviar um jogo por vez a cada 5 minutos
     if INDICE_JOGO_ATUAL >= len(JOGOS_REAIS_CACHE):
         INDICE_JOGO_ATUAL = 0
-        random.shuffle(JOGOS_REAIS_CACHE) # Mistura a lista de jogos novamente
+        random.shuffle(JOGOS_REAIS_CACHE)
 
     item = JOGOS_REAIS_CACHE[INDICE_JOGO_ATUAL]
     INDICE_JOGO_ATUAL += 1
@@ -125,11 +134,20 @@ def gerar_e_enviar_sinais():
         liga_nome = item["league"]["name"]
         pais = item["league"]["country"].upper()
         
+        # Coleta o horário de início real do jogo e converte para o fuso brasileiro
+        try:
+            horario_raw = item["fixture"]["date"]
+            # Converte formato ISO '2026-05-31T15:30:00+00:00' para hora local do Brasil
+            dt_utc = datetime.fromisoformat(horario_raw.replace('Z', '+00:00'))
+            dt_br = dt_utc.astimezone(timezone(timedelta(hours=-3)))
+            horario_jogo = dt_br.strftime("%H:%M")
+        except Exception:
+            horario_jogo = "Horário de Brasília"
+
         dados_reais = obter_dados_simulados()
         
-        # O modelo exato que você escolheu, aplicando os jogos reais da API
         mensagem = (
-            f"🕒 HORÁRIO: 16:00 | 📅 DATA: {fuso_brasil.strftime('%d/%m/%Y')}\n"
+            f"🕒 HORÁRIO: {horario_jogo} | 📅 DATA: {fuso_brasil.strftime('%d/%m/%Y')}\n"
             f"⚽ COMPETIÇÃO: {pais} - {liga_nome}\n"
             f"⚔️ PARTIDA: {time_casa} ({dados_reais['porcentagem_casa']}) x ({dados_reais['porcentagem_fora']}) {time_fora}\n"
             f"🤝 CHANCE DE EMPATE: {dados_reais['porcentagem_empate']}\n\n"
@@ -150,48 +168,44 @@ def gerar_e_enviar_sinais():
         )
         
         bot.send_message(CHAT_ID, text=mensagem)
-        print(f"[Aniversario-App] Jogo Real enviado com sucesso: {time_casa} x {time_fora}")
+        print(f"[Bot Real] Jogo enviado com sucesso: {time_casa} x {time_fora}")
     except Exception as e:
-        print(f"[ERRO CRÍTICO TELEGRAM] Falha ao tentar postar mensagens: {e}")
+        print(f"[ERRO TELEGRAM] Falha ao enviar mensagem: {e}")
 
 def loop_relogio_diario():
-    print("[Aniversario-App] Sistema de contagem regressiva iniciado.")
-    print("[Aniversario-App] Carregando banco de dados real inicial e disparando...")
-    
+    print("[Bot Real] Loop de 5 minutos ativado.")
     buscar_jogos_reais_na_api()
     gerar_e_enviar_sinais()
     
     contador_minutos = 0
     while True:
         try:
-            # Aguarda exatamente 5 minutos (300 segundos) para enviar a próxima mensagem
+            # Aguarda exatamente 5 minutos (300 segundos) para enviar o próximo sinal real
             time.sleep(300)
             contador_minutos += 5
             
-            # A cada 60 minutos (1 hora), renova a lista na API para ver se surgiram novos jogos
+            # A cada 60 minutos, faz apenas 1 consulta para renovar a lista e economizar créditos
             if contador_minutos >= 60:
                 buscar_jogos_reais_na_api()
                 contador_minutos = 0
                 
-            print("[Aniversario-App] Executando rotina automatica cíclica de 5 minutos...")
             gerar_e_enviar_sinais()
         except Exception as e:
-            print(f"[Erro de Thread] Recompondo loop: {e}")
+            print(f"[Erro de Loop] Reiniciando contagem: {e}")
             time.sleep(30)
 
 @app.route('/')
 def home(): 
     return jsonify({
         "status": "online",
-        "projeto": "Gerenciador de Eventos e Festas de Aniversario v1.2",
-        "modo": "Jogos Reais Rotativos - 5 Minutos"
+        "modo": "Jogos Reais Livres - Loop 5 Minutos",
+        "jogos_mapeados": len(JOGOS_REAIS_CACHE)
     }), 200
 
 @app.route('/testar')
 def testar_agora():
-    print("[Aniversario-App] Rota de simulacao manual acionada.")
     Thread(target=gerar_e_enviar_sinais).start()
-    return "Processando testes em segundo plano... Verifique os logs do Render!", 200
+    return "Processando disparo manual com jogo real... Olhe o Telegram!", 200
 
 if __name__ == '__main__':
     thread_relogio = Thread(target=loop_relogio_diario)
