@@ -17,7 +17,14 @@ API_KEY = os.environ.get('API_SPORTS_KEY', '').strip()
 bot = telebot.TeleBot(TOKEN) if TOKEN else None
 app = Flask(__name__)
 
-LIGAS_ATIVAS = [71, 72, 73, 74, 39, 140, 78, 135, 253, 255, 257, 2, 3, 5, 4, 9, 103, 106, 113, 283, 197, 218]
+LIGAS_ATIVAS = [
+    71, 72, 73, 74,
+    39, 140, 78, 135,
+    253, 255, 257,
+    2, 3, 5, 4, 9,
+    103, 106, 113,
+    283, 197, 218
+]
 
 CACHE_FILE = "jogos_cache.json"
 
@@ -173,16 +180,57 @@ def gerar_e_enviar_sinais():
 @app.route('/')
 def home(): 
     jogos_cache, _ = carregar_cache_local()
-    return jsonify({
-        "status": "online",
-        "modo": "UptimeRobot Trigger Ativo",
-        "jogos_em_cache": len(jogos_cache)
-    }), 200
+    html_painel = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Painel Robô-Grilo</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; text-align: center; background: #121212; color: white; padding-top: 50px; }}
+            .btn {{ background: #007bff; color: white; border: none; padding: 20px 40px; font-size: 20px; font-weight: bold; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }}
+            .btn:active {{ background: #0056b3; transform: scale(0.98); }}
+            .status {{ margin-top: 20px; color: #aaa; font-size: 14px; }}
+        </style>
+    </head>
+    <body>
+        <h1>🦗 Painel de Controle - Robô Grilo</h1>
+        <p>Jogos reais salvos no sistema hoje: <strong>{len(jogos_cache)}</strong></p>
+        <br><br>
+        <form action="/executar-cron" method="GET">
+            <button type="submit" class="btn">🚀 MANDAR SINAL AGORA</button>
+        </form>
+        <p class="status">Modo: Disparo Manual + UptimeRobot</p>
+    </body>
+    </html>
+    """
+    return html_painel
 
 @app.route('/executar-cron')
 def executar_cron():
     resultado = gerar_e_enviar_sinais()
-    return jsonify({"status": "processado", "resposta": resultado}), 200
+    html_resposta = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Sinal Enviado</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; text-align: center; background: #121212; color: white; padding-top: 80px; }}
+            .sucesso {{ color: #28a745; font-size: 24px; font-weight: bold; }}
+            .btn-voltar {{ background: #333; color: white; text-decoration: none; padding: 10px 20px; border-radius: 5px; display: inline-block; margin-top: 30px; }}
+        </style>
+    </head>
+    <body>
+        <div class="sucesso">✅ Comando Executado!</div>
+        <p>Resposta do Servidor: {resultado}</p>
+        <a href="/" class="btn-voltar">⬅️ Voltar para o Painel</a>
+    </body>
+    </html>
+    """
+    return html_resposta
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
