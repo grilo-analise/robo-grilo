@@ -17,7 +17,6 @@ API_KEY = os.environ.get('API_SPORTS_KEY', '').strip()
 bot = telebot.TeleBot(TOKEN) if TOKEN else None
 app = Flask(__name__)
 
-# LISTA CORRIGIDA COM AS MELHORES LIGAS DO MUNDO
 LIGAS_ATIVAS = [
     71, 72, 73, 74,   # Brasileirão Série A, B, C e D
     39, 140, 78, 135, # Ligas Europeias (Premier, LaLiga, Bundesliga, Serie A)
@@ -76,7 +75,6 @@ def buscar_jogos_reais_na_api():
             todos_jogos = dados.get("response", [])
             jogos_filtrados = [j for j in todos_jogos if j.get("league", {}).get("id") in LIGAS_ATIVAS]
             
-            # SE AS NOSSAS LIGAS ESTIVEREM VAZIAS, PEGA QUALQUE JOGO DO MUNDO PARA NÃO TRAVAR
             if not jogos_filtrados and todos_jogos:
                 print("[API] Sem jogos nas ligas principais. Carregando ligas secundarias...")
                 jogos_filtrados = todos_jogos
@@ -229,3 +227,10 @@ def executar_cron():
     <body>
         <div class="sucesso">✅ Comando Executado!</div>
         <p>Resposta do Servidor: {resultado}</p>
+        <a href="/" class="btn-voltar">⬅️ Voltar para o Painel</a>
+    </body>
+    </html>
+    """
+    return html_resposta
+
+if __name__ == '__main__':
