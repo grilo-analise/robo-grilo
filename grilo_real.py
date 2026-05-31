@@ -19,29 +19,21 @@ API_KEY = os.environ.get('API_SPORTS_KEY', '').strip()
 bot = telebot.TeleBot(TOKEN) if TOKEN else None
 app = Flask(__name__)
 
-# IDs oficiais da API-Football para ligas de elite (ex: Brasileirão, Premier League, Champions)
-LIGAS_ELITE = [71, 39, 140, 135, 78, 2] 
-
-def puxar_jogos_reais_da_api():
-    """Busca os jogos do dia atual para as ligas selecionadas na API-Football"""
+def puxar_todos_jogos_ao_vivo():
+    """Busca TODOS os jogos ao vivo do mundo de forma otimizada em uma única chamada"""
     if not API_KEY:
         print("[ERRO API] API_SPORTS_KEY nao configurada nas variaveis de ambiente.")
         return []
 
-    # Define a data de hoje no formato AAAA-MM-DD
-    fuso_brasil = datetime.now(timezone.utc) - timedelta(hours=3)
-    data_hoje = fuso_brasil.strftime("%Y-%m-%d")
-    
+    # Endpoint otimizado para trazer tudo que está acontecendo no planeta agora
     url = "https://api-sports.io"
     headers = {
         'x-rapidapi-host': "v3.football.api-sports.io",
         'x-rapidapi-key': API_KEY
     }
+    params = {"live": "all"}
     
-    jogos_filtrados = []
-    
-    # Faz uma chamada para trazer os jogos de hoje
-    params = {"date": data_hoje}
+    jogos_processados = []
     
     try:
         response = requests.get(url, headers=headers, params=params, timeout=15)
@@ -52,75 +44,34 @@ def puxar_jogos_reais_da_api():
         dados = response.json()
         fixtures = dados.get("response", [])
         
-        # Filtra apenas os jogos que pertencem às nossas ligas de elite
         for f in fixtures:
-            league_id = f.get("league", {}).get("id")
-            if league_id in LIGAS_ELITE:
-                # Extrai o horário correto convertido para o fuso do Brasil
-                utc_date = f.get("fixture", {}).get("date")
-                horario_br = "Definir"
-                if utc_date:
-                    try:
-                        # Conversão básica de string UTC para horário BR (-3h)
-                        dt = datetime.fromisoformat(utc_date.replace('Z', '+00:00'))
-                        dt_br = dt.astimezone(timezone(timedelta(hours=-3)))
-                        horario_br = dt_br.strftime("%H:%M")
-                    except Exception:
-                        horario_br = "16:00"
-
-                jogos_filtrados.append({
-                    "id_jogo": f.get("fixture", {}).get("id"),
-                    "horario": horario_br,
+            fixture_info = f.get("fixture", {})
+            status_short = fixture_info.get("status", {}).get("short", "")
+            
+            # Filtra apenas jogos que estão rolando no momento (1º tempo, intervalo, 2º tempo)
+            if status_short in ["1H", "HT", "2H"]:
+                # Pega o tempo atual do jogo (ex: 45 min)
+                tempo_jogo = fixture_info.get("status", {}).get("elapsed", 0)
+                
+                goals = f.get("goals", {})
+                placar_casa = goals.get("home", 0)
+                placar_fora = goals.get("away", 0)
+                
+                jogos_processados.append({
                     "liga_nome": f.get("league", {}).get("name"),
                     "pais": f.get("league", {}).get("country", "").upper(),
                     "time_casa": f.get("teams", {}).get("home", {}).get("name"),
-                    "time_fora": f.get("teams", {}).get("away", {}).get("name")
+                    "time_fora": f.get("teams", {}).get("away", {}).get("name"),
+                    "tempo": tempo_jogo,
+                    "placar": f"{placar_casa} x {placar_fora}"
                 })
         
-        print(f"[API] Sucesso! Encontrados {len(jogos_filtrados)} jogos importantes para hoje.")
-        return jogos_filtrados
+        print(f"[API] Sucesso! Monitorando {len(jogos_processados)} jogos ao vivo em todas as ligas.")
+        return jogos_processados
         
     except Exception as e:
         print(f"[ERRO CRÍTICO API] Falha ao conectar na API-Football: {e}")
         return []
-
-def puxar_estatisticas_historicas(id_jogo):
-    """Busca predições e dados estatísticos reais do confronto direto"""
-    url = f"https://api-sports.io"
-    headers = {
-        'x-rapidapi-host': "v3.football.api-sports.io",
-        'x-rapidapi-key': API_KEY
-    }
-    params = {"fixture": id_jogo}
-    
-    # Valores padrão de segurança caso a API não tenha dados daquele jogo específico
-    dados_padrao = {
-        "p_casa": "33%", "p_empate": "34%", "p_fora": "33%",
-        "conselho": "Análise em tempo real manual", "ambas_marcam": "Não Informado"
-    }
-    
-    try:
-        response = requests.get(url, headers=headers, params=params, timeout=10)
-        if response.status_code == 200:
-            res_json = response.json()
-            lista_resp = res_json.get("response", [])
-            if lista_resp:
-                pred = lista_resp[0]
-                percentuais = pred.get("predictions", {}).get("percent", {})
-                conselho = pred.get("predictions", {}).get("advice", "Sem recomendação")
-                ambas = pred.get("predictions", {}).get("btts", "N/A")
-                
-                return {
-                    "p_casa": percentuais.get("home", "33%"),
-                    "p_empate": percentuais.get("draw", "34%"),
-                    "p_fora": percentuais.get("away", "33%"),
-                    "conselho": conselho,
-                    "ambas_marcam": "Sim" if ambas is True else ("Não" if ambas is False else "50%")
-                }
-    except Exception as e:
-        print(f"[ERRO ESTATÍSTICA] Não foi possível ler dados do jogo {id_jogo}: {e}")
-        
-    return dados_padrao
 
 def gerar_e_enviar_sinais():
     if not bot or not CHAT_ID:
@@ -128,74 +79,68 @@ def gerar_e_enviar_sinais():
         return
 
     fuso_brasil = datetime.now(timezone.utc) - timedelta(hours=3)
+    print(f"[Grilo-Bot] Iniciando varredura global às {fuso_brasil.strftime('%H:%M:%S')}")
     
-    print("[Aniversario-App] Buscando partidas reais do dia...")
-    jogos_reais = puxar_jogos_reais_da_api()
+    jogos_vivos = puxar_todos_jogos_ao_vivo()
     
-    if not jogos_reais:
-        print("[Aniversario-App] Nenhum jogo de liga elite agendado para hoje ou erro de conexão.")
+    if not jogos_vivos:
+        print("[Grilo-Bot] Nenhum jogo ao vivo encontrado no mundo neste minuto.")
         return
 
     try:
-        print(f"[Aniversario-App] Disparando conexao com o Chat ID: {CHAT_ID}")
-        abertura = f"📢 BOLETIM DE ANÁLISE GRILO V1\n📅 DATA: {fuso_brasil.strftime('%d/%m/%Y')}\n📊 Coletando dados em tempo real da API..."
-        
+        abertura = (
+            f"📢 BOLETIM GLOBAL - TODOS OS JOGOS AO VIVO\n"
+            f"📅 DATA: {fuso_brasil.strftime('%d/%m/%Y')} às {fuso_brasil.strftime('%H:%M')}\n"
+            f"🌍 Monitorando todas as ligas mundiais simultaneamente..."
+        )
         bot.send_message(CHAT_ID, text=abertura)
-        time.sleep(2) # Pausa estratégica para evitar spam block do Telegram
+        time.sleep(2)
         
-        for jogo in jogos_reais:
-            # Puxa as probabilidades reais geradas pelos analistas da API para este confronto
-            stats = puxar_estatisticas_historicas(jogo["id_jogo"])
-            
+        # Envia os blocos de jogos ao vivo encontrados para o canal
+        for jogo in jogos_vivos:
             mensagem = (
-                f"🕒 HORÁRIO: {jogo['horario']} | 📅 DATA: {fuso_brasil.strftime('%d/%m/%Y')}\n"
                 f"⚽ COMPETIÇÃO: {jogo['pais']} - {jogo['liga_nome']}\n"
-                f"⚔️ PARTIDA: {jogo['time_casa']} ({stats['p_casa']}) x ({stats['p_fora']}) {jogo['time_fora']}\n"
-                f"🤝 CHANCE DE EMPATE: {stats['p_empate']}\n\n"
-                f"📊 DADOS DE MERCADO REAL:\n"
-                f"📋 [AMBAS MARCAM]: {stats['ambas_marcam']}\n"
-                f"🔷 APOSTA DE VALOR SUGERIDA:\n"
-                f"💡 {stats['conselho']}\n"
+                f"⚔️ PARTIDA: {jogo['time_casa']} x {jogo['time_fora']}\n"
+                f"⏱️ TEMPO DE JOGO: {jogo['tempo']}' minutos\n"
+                f"📊 PLACAR ATUAL: {jogo['placar']}\n"
+                f"🔷 STATUS: Análise de tendência ativa\n"
                 f"=========================================="
             )
             bot.send_message(CHAT_ID, text=mensagem)
-            print(f"[Aniversario-App] Mensagem REAL enviada: {jogo['time_casa']} x {jogo['time_fora']}")
+            print(f"[Grilo-Bot] Sinal enviado: {jogo['time_casa']} x {jogo['time_fora']}")
+            time.sleep(1.5) # Proteção contra bloqueio por spam no Telegram
             
-            # Pausa de 2 segundos entre as requisições para respeitar o limite de velocidade (Rate Limit) da API
-            time.sleep(2)
-            
-        print("[Aniversario-App] Ciclo de postagens concluido com dados reais.")
+        print("[Grilo-Bot] Varredura completa de todas as ligas finalizada.")
     except Exception as e:
         print(f"[ERRO CRÍTICO TELEGRAM] Falha ao postar mensagens: {e}")
 
 def loop_relogio_diario():
-    print("[Aniversario-App] Sistema de contagem regressiva iniciado.")
-    # Executa o comando imediatamente ao ligar o servidor para validar a API nos logs
+    print("[Grilo-Bot] Cronômetro cíclico global de 5 minutos iniciado.")
     gerar_e_enviar_sinais()
     
     while True:
         try:
-            agora_br = datetime.now(timezone.utc) - timedelta(hours=3)
-            # Executa a rotina automaticamente todos os dias às 05:00 da manhã
-            if agora_br.strftime("%H:%M") == "05:00":
-                gerar_e_enviar_sinais()
-                time.sleep(65)
-            time.sleep(30)
-        except Exception:
-            time.sleep(30)
+            # Espera 5 minutos (300 segundos) para a próxima varredura global
+            time.sleep(300)
+            gerar_e_enviar_sinais()
+        except Exception as e:
+            print(f"[ERRO TEMPORIZADOR] Reiniciando contagem: {e}")
+            time.sleep(10)
 
 @app.route('/')
 def home(): 
     return jsonify({
         "status": "online",
-        "projeto": "Gerenciador de Sinais Esportivos Real v1.5"
+        "projeto": "Monitor Global de Futebol v2.0",
+        "cobertura": "Todas as ligas mundiais",
+        "intervalo": "5 minutos"
     }), 200
 
 @app.route('/testar')
 def testar_agora():
-    print("[Aniversario-App] Rota de simulacao manual acionada.")
+    print("[Grilo-Bot] Rota de simulação manual acionada.")
     Thread(target=gerar_e_enviar_sinais).start()
-    return "Processando testes em segundo plano... Verifique os logs do Render!", 200
+    return "Processando testes globais em segundo plano... Verifique os logs do Render!", 200
 
 if __name__ == '__main__':
     thread_relogio = Thread(target=loop_relogio_diario)
