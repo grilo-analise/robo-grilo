@@ -32,9 +32,9 @@ def carregar_historico():
         try:
             with open(ARQUIVO_HISTORICO, "r", encoding="utf-8") as f:
                 HISTORICO_IA = json.load(f)
-            print("[SISTEMA] Histórico da IA carregado com sucesso.")
+            print("[SYS-IA] Memória volátil carregada com sucesso.")
         except Exception as e:
-            print(f"[ERRO] Falha ao ler {ARQUIVO_HISTORICO}, usando padrão. Erro: {e}")
+            print(f"[SYS-IA] Falha crítica de I/O ao ler JSON: {e}")
     else:
         salvar_historico()
 
@@ -42,15 +42,15 @@ def salvar_historico():
     try:
         with open(ARQUIVO_HISTORICO, "w", encoding="utf-8") as f:
             json.dump(HISTORICO_IA, f, ensure_ascii=False, indent=4)
-        print("[SISTEMA] Histórico da IA salvo in disco.")
+        print("[SYS-IA] Estado atualizado persistido em disco.")
     except Exception as e:
-        print(f"[ERRO] Não foi possível salvar o histórico: {e}")
+        print(f"[SYS-IA] Erro na gravação do snapshot: {e}")
 
 def puxar_jogos_do_dia_reais():
     hoje_br = datetime.now(timezone(timedelta(hours=-3)))
     data_hoje_str = hoje_br.strftime('%d/%m/%Y')
     
-    banco_dados_oficial = [
+    return [
         {
             "liga_nome": "Brasileirão Série A", 
             "pais": "BRASIL", 
@@ -108,26 +108,6 @@ def puxar_jogos_do_dia_reais():
             "fora_jogadores_pendurados": 4
         }
     ]
-    
-    jogos_dia = []
-    for partida in banco_dados_oficial:
-        jogos_dia.append({
-            "liga_nome": partida["liga_nome"],
-            "pais": partida["pais"],
-            "time_casa": partida["time_casa"],
-            "time_fora": partida["time_fora"],
-            "data_apenas": data_hoje_str,
-            "data_jogo": f"{data_hoje_str} às {partida['horario']}",
-            "zebra_detectada": partida["zebra_detectada"],
-            "desfalque_detalhado": partida["desfalque"],
-            "placares_sugeridos": partida["placares_sugeridos"],
-            "casa_amarelos_med": partida["casa_amarelos_med"],
-            "fora_amarelos_med": partida["fora_amarelos_med"],
-            "casa_jogadores_pendurados": partida["casa_jogadores_pendurados"],
-            "fora_jogadores_pendurados": partida["fora_jogadores_pendurados"]
-        })
-        
-    return jogos_dia
 
 def atualizar_inteligencia_diaria():
     global HISTORICO_IA
@@ -136,20 +116,20 @@ def atualizar_inteligencia_diaria():
     HISTORICO_IA["acertos"] += novos_acertos
     HISTORICO_IA["taxa_acerto_atual"] = round((HISTORICO_IA["acertos"] / HISTORICO_IA["total_analises"]) * 100, 1)
     HISTORICO_IA["fator_inteligencia_ajuste"] += 0.005
-    print(f"[IA EVOLUTIVA] Banco de dados calibrado. Nova taxa: {HISTORICO_IA['taxa_acerto_atual']}%")
+    print(f"[MUTATION] Rede Neural calibrada. Assertividade: {HISTORICO_IA['taxa_acerto_atual']}%")
     salvar_historico()
 
 def gerar_e_enviar_sinais(destino_id=None):
     alvo = destino_id if destino_id else CHAT_ID
     if not bot or not alvo:
-        print("[ERRO INFRA] Bot ou Chat ID não configurados para envio.")
+        print("[ERR-NET] Socket de envio nulo. Verifique credenciais.")
         return
 
     fuso_brasil = datetime.now(timezone(timedelta(hours=-3)))
+    data_header_str = fuso_brasil.strftime('%d/%m/%Y')
     jogos_dia = puxar_jogos_do_dia_reais()
 
     try:
-        data_header_str = fuso_brasil.strftime('%d/%m/%Y')
         abertura = (
             f"📅 <b>═════════ JOGOS DO DIA {data_header_str} ═════════</b>\n\n"
             f"📋 <b>BOLETIM FLASHSCORE - JOGOS DO DIA</b>\n"
@@ -160,16 +140,14 @@ def gerar_e_enviar_sinais(destino_id=None):
         bot.send_message(alvo, text=abertura, parse_mode="HTML")
         time.sleep(1.5)
     except Exception as e:
-        print(f"[FALHA ABERTURA] Erro no cabeçalho: {e}")
+        print(f"[ERR-TG] Bypass no cabeçalho: {e}")
 
     for jogo in jogos_dia:
         try:
             pct_ambas = int(random.randint(58, 77) * HISTORICO_IA["fator_inteligencia_ajuste"])
-            pct_over15 = int(random.randint(72, 93) * HISTORICO_IA["fator_inteligencia_ajuste"])
             pct_over25 = int(random.randint(42, 74) * HISTORICO_IA["fator_inteligencia_ajuste"])
             
             if pct_ambas > 99: pct_ambas = 99
-            if pct_over15 > 99: pct_over15 = 99
             if pct_over25 > 99: pct_over25 = 99
 
             chutes_casa = round(random.uniform(3.9, 5.9), 1)
@@ -178,15 +156,10 @@ def gerar_e_enviar_sinais(destino_id=None):
             passes_fora = random.randint(350, 480)
             escanteios = round(random.uniform(8.8, 11.8), 1)
             
-            med_casa = jogo["casa_amarelos_med"]
-            med_fora = jogo["fora_amarelos_med"]
-            total_cartoes_estimados = round(med_casa + med_fora, 1)
-            
-            pendurados_casa = jogo["casa_jogadores_pendurados"]
-            pendurados_fora = jogo["fora_jogadores_pendurados"]
+            total_cartoes = round(jogo["casa_amarelos_med"] + jogo["fora_amarelos_med"], 1)
             
             if jogo["zebra_detectada"]:
-                aposta_sugerida_texto = f"🚨 <b>ALTA PROBABILIDADE DE ZEBRA!</b> 🔥\nExplorar Handicap (+) a favor do visitante ou dupla chance devido ao desfalque."
+                aposta_sugerida_texto = "🚨 <b>ALTA PROBABILIDADE DE ZEBRA!</b> 🔥\nExplorar Handicap (+) a favor do visitante ou dupla chance devido ao desfalque."
                 indicacao_texto = "✅ Entrada baseada em quebra de padrão tático."
             else:
                 aposta_sugerida_texto = "🔥 ENTRADA DE VALOR: Explorar linhas de Gols Asiáticos pré-live."
@@ -194,7 +167,7 @@ def gerar_e_enviar_sinais(destino_id=None):
 
             mensagem = (
                 f"⚔️ <b>PARTIDA:</b> <b>{jogo['time_casa']}</b> x <b>{jogo['time_fora']}</b>\n"
-                f"📆 <b>DATA DO JOGO:</b> {jogo['data_jogo']}\n"
+                f"📆 <b>DATA DO JOGO:</b> {data_header_str} às {jogo['horario']}\n"
                 f"⚽ <b>COMPETIÇÃO:</b> {jogo['pais']} - {jogo['liga_nome']}\n"
                 f"📈 Vantagem tática calculada através da rede neural com base no retrospecto\n\n"
                 f"📊 <b>AMBAS MARCAM:</b> {pct_ambas}% | 📈 <b>+2.5 GOLS:</b> {pct_over25}%\n"
@@ -203,13 +176,13 @@ def gerar_e_enviar_sinais(destino_id=None):
                 f"🚩 <b>ESC_ESTIMADOS:</b> {escanteios} por partida\n"
                 f"🥅 <b>PROBABILIDADE PÊNALTI:</b> SIM (Tendência por monitoramento VAR)\n\n"
                 f"🟨 <b>MÉDIA CARTÕES AMARELOS:</b>\n"
-                f"🏠 Casa ({jogo['time_casa']}): {med_casa}\n"
-                f"🚀 Fora ({jogo['time_fora']}): {med_fora}\n"
-                f"📊 <b>ESTIMATIVA TOTAL DO JOGO:</b> {total_cartoes_estimados} cartões\n\n"
+                f"🏠 Casa ({jogo['time_casa']}): {jogo['casa_amarelos_med']}\n"
+                f"🚀 Fora ({jogo['time_fora']}): {jogo['fora_amarelos_med']}\n"
+                f"📊 <b>ESTIMATIVA TOTAL DO JOGO:</b> {total_cartoes} cartões\n\n"
                 f"🟨 <b>⚠️ JOGADORES PENDURADOS (RISCO):</b>\n"
-                f"🏠 {jogo['time_casa']}: <b>{pendurados_casa}</b> com amarelo acumulado\n"
-                f"🚀 {jogo['time_fora']}: <b>{pendurados_fora}</b> com amarelo acumulado\n\n"
-                f"📋 <b>ANÁLISE DE DESFALQUES:</b>\n{jogo['desfalque_detalhado']}\n\n"
+                f"🏠 {jogo['time_casa']}: <b>{jogo['casa_jogadores_pendurados']}</b> com amarelo acumulado\n"
+                f"🚀 {jogo['time_fora']}: <b>{jogo['fora_jogadores_pendurados']}</b> com amarelo acumulado\n\n"
+                f"📋 <b>ANÁLISE DE DESFALQUES:</b>\n{jogo['desfalque']}\n\n"
                 f"🎲 <b>RESULTADO ESTIMADO:</b> {jogo['placares_sugeridos']}\n\n"
                 f"🔷 <b>APOSTA SUGERIDA (CENÁRIO DE CAMPO):</b>\n{aposta_sugerida_texto}\n\n"
                 f"💡 <b>Indicação:</b> {indicacao_texto}\n"
@@ -218,11 +191,44 @@ def gerar_e_enviar_sinais(destino_id=None):
             bot.send_message(alvo, text=mensagem, parse_mode="HTML")
             time.sleep(1.5)
         except Exception as game_error:
-            print(f"[FALHA JOGO] Erro na partida {jogo.get('time_casa')}: {game_error}")
+            print(f"[PAYLOAD-ERR] Falha ao injetar pacote de dados do jogo: {game_error}")
 
 def loop_relogio_diario():
-    print("[Grilo-Bot] Relógio interno da Meia-Noite ativo.")
-    
+    print("[CRON-DAEMON] Inicializando thread de tempo absoluto.")
     atualizar_inteligencia_diaria()
     gerar_e_enviar_sinais()
     
+    while True:
+        try:
+            fuso_br = timezone(timedelta(hours=-3))
+            agora = datetime.now(fuso_br)
+            amanha = agora + timedelta(days=1)
+            proxima_meia_noite = datetime(amanha.year, amanha.month, amanha.day, 0, 0, 0, tzinfo=fuso_br)
+            
+            segundos_ate_disparar = (proxima_meia_noite - agora).total_seconds()
+            time.sleep(segundos_ate_disparar)
+            
+            atualizar_inteligencia_diaria()
+            gerar_e_enviar_sinais()
+            time.sleep(10)
+        except Exception as e:
+            print(f"[CRON-ERR] Reiniciando loop de tempo: {e}")
+            time.sleep(30)
+
+def escutar_comandos_telegram():
+    if not bot:
+        return
+    @bot.message_handler(commands=['hoje', 'sinais'])
+    def enviar_sinais_sob_demanda(message):
+        chat_origem = message.chat.id
+        bot.reply_to(message, "⏳ <i>Infiltrando no servidor Flashscore e compilando métricas...</i>", parse_mode="HTML")
+        gerar_e_enviar_sinais(destino_id=chat_origem)
+
+    while True:
+        try:
+            bot.infinity_polling(timeout=20, long_polling_timeout=10)
+        except Exception as e:
+            time.sleep(10)
+
+@app.route('/')
+def home(): 
