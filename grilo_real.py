@@ -169,14 +169,25 @@ def gerar_e_enviar_sinais():
         print(f"[FALHA] Erro ao postar: {e}")
 
 def loop_relogio_diario():
-    print("[Grilo-Bot] Loop de monitoramento de IA ativo.")
+    print("[Grilo-Bot] Relógio interno de alta precisão (Meia-Noite) ativo.")
+    
+    # Faz um envio imediato apenas para testar no momento que o Render ligar
     gerar_e_enviar_sinais()
     
     while True:
         try:
-            time.sleep(86400) # Ciclo mestre autônomo de 24 horas
-            atualizar_inteligencia_diaria()
-            gerar_e_enviar_sinais()
+            # Captura a hora exata no fuso do Brasil de 10 em 10 segundos
+            fuso_br = timezone(timedelta(hours=-3))
+            agora = datetime.now(fuso_br)
+            
+            # Condição estrita: Ativa exatamente à 00:00 (Meia-Noite)
+            if agora.hour == 0 and agora.minute == 0:
+                print(f"[Grilo-Bot] Virada de dia detectada! Disparando boletim oficial do dia.")
+                atualizar_inteligencia_diaria()
+                gerar_e_enviar_sinais()
+                time.sleep(65) # Dorme pouco mais de 1 minuto para não duplicar o gatilho
+                
+            time.sleep(10)
         except Exception as e:
             print(f"[REINICIANDO TIMEOUT] {e}")
             time.sleep(10)
@@ -185,7 +196,7 @@ def loop_relogio_diario():
 def home(): 
     return jsonify({
         "status": "online", 
-        "projeto": "Monitor Flashscore AI Master Ultimate v8.0",
+        "projeto": "Monitor Flashscore AI Midnight Edition v8.5",
         "ia_assertividade_atual": f"{HISTORICO_IA['taxa_acerto_atual']}%"
     }), 200
 
