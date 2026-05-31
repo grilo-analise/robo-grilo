@@ -8,26 +8,22 @@ import uvicorn
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("ProtocoloGrilo")
 
-# ==============================================================================
-# 🚀 VARIÁVEIS DE AMBIENTE: Lendo o token e o ID do seu painel do Render
-# ==============================================================================
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 CHAT_ID = os.environ.get("CHAT_SINAIS_ID")
 
 def enviar_mensagem_telegram(texto):
-    """ Envia os palpites direto para o seu canal com o link da API fixo e seguro """
+    """ Envia os palpites em formato de texto puro para evitar travas de exibição """
     if not TELEGRAM_TOKEN or not CHAT_ID:
         logger.error("❌ ERRO CRÍTICO: Variáveis não correspondidas no Render!")
         return
 
-    # Limpa qualquer espaço em branco que tenha vindo do painel sem querer
     token_limpo = str(TELEGRAM_TOKEN).strip()
     chat_limpo = str(CHAT_ID).strip()
 
-    # URL CONSTRUÍDA DO ZERO - Totalmente imune a falhas de variáveis
     url_final = f"https://telegram.org{token_limpo}/sendMessage"
     
-    payload = {"chat_id": chat_limpo, "text": texto, "parse_mode": "Markdown"}
+    # REMOVIDO PARSE_MODE PARA GARANTIR A ENTREGA ABSOLUTA
+    payload = {"chat_id": chat_limpo, "text": texto}
     try:
         response = requests.post(url_final, json=payload, timeout=10)
         if response.status_code == 200:
@@ -38,21 +34,22 @@ def enviar_mensagem_telegram(texto):
         logger.error(f"❌ Erro de conexão com o Telegram: {str(e)}")
 
 def ejecutar_analise_da_rodada():
-    """ Módulo tático principal carregado com os jogos reais de hoje. """
+    """ Módulo tático principal sem formatação pesada """
     logger.info("🤖 [ML] Iniciando varredura tática da rodada de futebol...")
     
+    # Texto limpo sem asteriscos ou underlines soltos
     mensagem_tactica = (
-        "🤖 *PRODUTO GRILO V1 - ANÁLISE TÁTICA DA RODADA*\n"
-        "📅 _Jogos Reais: 31 de Maio de 2026_\n"
-        "-----------------------------------------\n\n"
-        "⚽ *Bragantino vs Internacional* (11h00)\n"
-        "🎯 *Palpite do Robô:* Bragantino ou Empate (Dupla Chance)\n\n"
-        "⚽ *Vasco da Gama vs Atlético-MG* (16h00)\n"
-        "🎯 *Palpite do Robô:* Ambas Marcam (Sim)\n\n"
-        "⚽ *Palmeiras vs Chapecoense* (16h00)\n"
-        "🎯 *Palpite do Robô:* Vitória do Palmeiras HT\n\n"
-        "-----------------------------------------\n"
-        "⚙️ _Módulo ML: Sistema de Links Fixos Ativado!_"
+        "PRODUTO GRILO V1 - ANÁLISE TÁTICA DA RODADA\n"
+        "Jogos Reais: 31 de Maio de 2026\n"
+        "=========================================\n\n"
+        "Jogo: Bragantino vs Internacional\n"
+        "Palpite do Robo: Bragantino ou Empate (Dupla Chance)\n\n"
+        "Jogo: Vasco da Gama vs Atletico-MG\n"
+        "Palpite do Robo: Ambas Marcam (Sim)\n\n"
+        "Jogo: Palmeiras vs Chapecoense\n"
+        "Palpite do Robo: Vitoria do Palmeiras no Primeiro Tempo\n\n"
+        "=========================================\n"
+        "Modulo ML: Sistema Destravado em Texto Puro!"
     )
     enviar_mensagem_telegram(mensagem_tactica)
 
