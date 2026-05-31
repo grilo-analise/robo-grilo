@@ -42,7 +42,7 @@ def salvar_historico():
     try:
         with open(ARQUIVO_HISTORICO, "w", encoding="utf-8") as f:
             json.dump(HISTORICO_IA, f, ensure_ascii=False, indent=4)
-        print("[SISTEMA] Histórico da IA salvo em disco.")
+        print("[SISTEMA] Histórico da IA salvo in disco.")
     except Exception as e:
         print(f"[ERRO] Não foi possível salvar o histórico: {e}")
 
@@ -151,7 +151,7 @@ def gerar_e_enviar_sinais(destino_id=None):
     try:
         data_header_str = fuso_brasil.strftime('%d/%m/%Y')
         abertura = (
-            f"📅 <b>═════════ JOGOS DO DAY {data_header_str} ═════════</b>\n\n"
+            f"📅 <b>═════════ JOGOS DO DIA {data_header_str} ═════════</b>\n\n"
             f"📋 <b>BOLETIM FLASHSCORE - JOGOS DO DIA</b>\n"
             f"📅 <b>EMISSÃO:</b> {data_header_str} às {fuso_brasil.strftime('%H:%M')}\n"
             f"🎯 <b>ASSERTIVIDADE DA IA DIÁRIA:</b> ✅ {HISTORICO_IA['taxa_acerto_atual']}% de Green acumulado\n"
@@ -226,5 +226,3 @@ def loop_relogio_diario():
     atualizar_inteligencia_diaria()
     gerar_e_enviar_sinais()
     
-    while True:
-        try:
