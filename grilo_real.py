@@ -207,3 +207,4 @@ def gerar_e_enviar_sinais():
                 print(f"[Grilo-Bot] Relatório completo enviado com dados de cartões: {jogo['time_casa']}")
                 time.sleep(2.0)
             
+
