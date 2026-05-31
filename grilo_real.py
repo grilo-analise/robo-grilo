@@ -84,7 +84,7 @@ def buscar_jogos_reais_na_api():
                 print(f"[API] Sucesso! {len(jogos_filtrados)} jogos carregados.")
                 return jogos_filtrados
         else:
-            print(f"[API ERRO HTTP] Código: {response.status_code}")
+            print(f"[API ERRO HTTP] Codigo: {response.status_code}")
     except Exception as e:
         print(f"[API FALHA CRITICA] Erro: {e}")
     return []
@@ -104,8 +104,8 @@ def obtener_dados_simulados():
         "passes_casa": f"{random.randint(390, 480)}", 
         "passes_fora": f"{random.randint(340, 410)}",
         "cantos_estimados": f"{round(random.uniform(8.5, 10.5), 1)}", 
-        "penalti_decisao": random.choice(["NÃO", "SIM (Alta Tendência)"]), 
-        "vermelho_decisao": random.choice(["BAIXA", "MÉDIA"]),
+        "penalti_decisao": random.choice(["NAO", "SIM (Alta Tendencia)"]), 
+        "vermelho_decisao": random.choice(["BAIXA", "MEDIA"]),
         "h2h_historico": random.choice(["Equilibrado", "Vantagem Casa", "Vantagem Fora"]), 
         "ultimos_5_casa": random.choice(["V-E-V-D-E", "V-V-E-D-V", "E-D-V-V-E"]), 
         "ultimos_5_fora": random.choice(["E-V-D-D-V", "D-E-V-D-D", "E-E-V-D-E"]),
@@ -115,7 +115,7 @@ def obtener_dados_simulados():
 def gerar_e_enviar_sinais():
     if not bot or not CHAT_ID:
         print("[ERRO SISTEMA] TOKEN ou CHAT_ID nao configurados.")
-        return "Erro de configuração de credenciais."
+        return "Erro de configuracao de credenciais."
 
     fuso_brasil = datetime.now(timezone.utc) - timedelta(hours=3)
     jogos_cache, indice_atual = carregar_cache_local()
@@ -124,7 +124,7 @@ def gerar_e_enviar_sinais():
         jogos_cache = buscar_jogos_reais_na_api()
         indice_atual = 0
         if not jogos_cache:
-            return "Nenhum jogo disponível na API hoje."
+            return "Nenhum jogo disponivel na API hoje."
 
     if indice_atual >= len(jogos_cache):
         indice_atual = 0
@@ -146,7 +146,7 @@ def gerar_e_enviar_sinais():
             dt_br = dt_utc.astimezone(timezone(timedelta(hours=-3)))
             horario_jogo = dt_br.strftime("%H:%M")
         except Exception:
-            horario_jogo = "Horário de Brasília"
+            horario_jogo = "Horario de Brasilia"
 
         dados_reais = obtener_dados_simulados()
         
@@ -187,7 +187,7 @@ def home():
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>Painel Robô-Grilo</title>
+        <title>Painel Robo-Grilo</title>
         <style>
             body {{ font-family: Arial, sans-serif; text-align: center; background: #121212; color: white; padding-top: 50px; }}
             .btn {{ background: #007bff; color: white; border: none; padding: 20px 40px; font-size: 20px; font-weight: bold; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }}
@@ -196,7 +196,7 @@ def home():
         </style>
     </head>
     <body>
-        <h1>🦗 Painel de Controle - Robô Grilo</h1>
+        <h1>🦗 Painel de Controle - Robo Grilo</h1>
         <p>Jogos reais salvos no sistema hoje: <strong>{len(jogos_cache)}</strong></p>
         <br><br>
         <form action="/executar-cron" method="GET">
