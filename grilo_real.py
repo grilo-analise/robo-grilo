@@ -3,7 +3,7 @@ import logging
 from fastapi import FastAPI, BackgroundTasks
 import uvicorn
 
-# 1. CONFIGURAÇÃO DE LOGS (Para acompanhar em tempo real no painel do Render)
+# 1. CONFIGURAÇÃO DE LOGS (Acompanhamento em tempo real no painel do Render)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("ProtocoloGrilo")
 
@@ -57,27 +57,34 @@ def checar_e_carimbar_greens():
         logger.error(f"❌ Erro ao validar Greens da rodada: {str(e)}")
 
 # ==============================================================================
-# 📅 GATILHOS DA MADRUGADA (Rotina Automática)
+# 📅 GATILHOS DA MADRUGADA (Suporta GET e POST para evitar Erro 405 no Celular)
 # ==============================================================================
 
+@app.get("/cron/rodada-cinco-da-manha")
 @app.post("/cron/rodada-cinco-da-manha")
 async def gatilho_madrugada(background_tasks: BackgroundTasks):
+    """
+    Disparador das 05:00 da manhã. Agora aceita cliques diretos do navegador.
+    """
     logger.info("⏰ Relógio disparou! Iniciando rotina matinal automática.")
     background_tasks.add_task(executar_analise_da_rodada)
     return {"status": "Rotina matinal enviada para segundo plano"}
 
+@app.get("/cron/checador-greens")
 @app.post("/cron/checador-greens")
 async def gatilho_checagem(background_tasks: BackgroundTasks):
+    """
+    Disparador do checador de placares. Também aceita GET e POST.
+    """
+    logger.info("⏰ Relógio disparou! Iniciando checador de Greens automático.")
     background_tasks.add_task(checar_e_carimbar_greens)
-    return {"status": "Checador de Greens iniciado"}
+    return {"status": "Checador de Greens iniciado em segundo plano"}
 
 # ==============================================================================
-# 🚀 INICIALIZAÇÃO CORRETA DA APLICAÇÃO (Sem o sufixo .py)
+# 🚀 INICIALIZAÇÃO CORRETA DA APLICAÇÃO
 # ==============================================================================
 if __name__ == "__main__":
-    # Pega a porta do Render (10000) ou usa a 8000 localmente
+    # Pega a porta do Render ou usa a 10000 por padrão
     porta = int(os.environ.get("PORT", 10000))
     logger.info(f"🚀 Grilo V1 subindo na porta {porta}")
-    
-    # CORRIGIDO: Removido o ".py" do primeiro argumento para o Uvicorn aceitar a importação
     uvicorn.run("grilo_real:app", host="0.0.0.0", port=porta, reload=False)
