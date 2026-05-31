@@ -12,31 +12,22 @@ from flask import Flask, request, jsonify
 
 sys.stdout.reconfigure(line_buffering=True)
 
-TOKEN = os.environ.get('TELEGRAM_TOKEN')
-CHAT_ID = os.environ.get('CHAT_SINAIS_ID')
-API_KEY = os.environ.get('API_SPORTS_KEY')
+TOKEN = os.environ.get('TELEGRAM_TOKEN', '')
+CHAT_ID = os.environ.get('CHAT_SINAIS_ID', '')
+API_KEY = os.environ.get('API_SPORTS_KEY', '')
 
-# DIAGNÓSTICO DE INICIALIZAÇÃO (Aparecerá nos logs do Render)
 print("=== VERIFICAÇÃO DE CREDENCIAIS ===")
-if not TOKEN:
-    print("[ERRO CRÍTICO] TELEGRAM_TOKEN não configurado no Render!")
-else:
-    print(f"[OK] TELEGRAM_TOKEN encontrado (Inicia com: {TOKEN[:5]}...)")
-
-if not CHAT_ID:
-    print("[ERRO CRÍTICO] CHAT_SINAIS_ID não configurado no Render!")
-else:
-    print(f"[OK] CHAT_SINAIS_ID configurado como: {CHAT_ID}")
+print(f"TOKEN carregado: {'SIM (Configurado)' if TOKEN else 'NÃO (Vazio!)'}")
+print(f"CHAT_ID carregado: {'SIM (Configurado)' if CHAT_ID else 'NÃO (Vazio!)'}")
 print("==================================")
 
-bot = telebot.TeleBot(TOKEN)
+bot = telebot.TeleBot(TOKEN) if TOKEN else None
 app = Flask(__name__)
 
-HEADERS = {"x-apisports-key": API_KEY}
-BASE_URL = "https://api-sports.io"
-LIGAS_ELITE = 
+# IDS INSERIDOS DIRETO PARA ELIMINAR O SYNTAXERROR DE VEZ
+LIGAS_ELITE = [71, 72, 39, 140, 78, 135]
 
-def obter_dados_simulados():
+def obtener_dados_simulados():
     p_casa = random.randint(40, 65)
     p_fora = random.randint(15, 35)
     p_empate = 100 - p_casa - p_fora
@@ -60,18 +51,21 @@ def obter_dados_simulados():
     }
 
 def gerar_e_enviar_sinais():
+    if not bot or not CHAT_ID:
+        print("[ERRO] Envio cancelado: TOKEN ou CHAT_ID nao foram configurados no painel do Render.")
+        return
+
     fuso_brasil = datetime.now(timezone.utc) - timedelta(hours=3)
     hoje = fuso_brasil.strftime("%Y-%m-%d")
     
-    # Gerando os jogos de contingência direto para o teste
     jogos_elite = [
         {"teams": {"home": {"name": "Real Madrid"}, "away": {"name": "Barcelona"}}, "league": {"name": "La Liga", "country": "Spain"}},
         {"teams": {"home": {"name": "Man City"}, "away": {"name": "Man United"}}, "league": {"name": "Premier League", "country": "England"}},
-        {"teams": {"home": {"name": "Palmeiras"}, "away": {"name": "Flamengo"}}, "league": {"name": "Brasileirão", "country": "Brazil"}},
+        {"teams": {"home": {"name": "Palmeiras"}, "away": {"name": "Flamengo"}}, "league": {"name": "Brasileirao", "country": "Brazil"}},
     ]
 
     try:
-        print("[Aniversario-App] Tentando enviar abertura para o Telegram...")
+        print("[Aniversario-App] Tentando enviar sinais de contingência...")
         abertura = f"📢 *BOLETIM DE ANÁLISE GRILO V1*\n📅 *DATA:* {fuso_brasil.strftime('%d/%m/%Y')}\n📊 Estruturando Painel Visual de Jogos Profissionais..."
         bot.send_message(CHAT_ID, text=abertura, parse_mode="Markdown")
         time.sleep(1)
@@ -82,7 +76,7 @@ def gerar_e_enviar_sinais():
             liga_nome = item["league"]["name"]
             pais = item["league"]["country"].upper()
             
-            dados_reais = obter_dados_simulados()
+            dados_reais = obtener_dados_simulados()
             
             mensagem = (
                 f"🕒 *HORÁRIO:* 16:00 | 📅 *DATA:* {fuso_brasil.strftime('%d/%m/%Y')}\n"
@@ -104,16 +98,15 @@ def gerar_e_enviar_sinais():
                 f"{dados_reais['conselho']}\n"
                 f"=========================================="
             )
-            print(f"[Aniversario-App] Enviando jogo: {time_casa} x {time_fora}")
             bot.send_message(CHAT_ID, text=mensagem, parse_mode="Markdown")
             time.sleep(1)
             
-        print("[Aniversario-App] Todos os sinais de teste enviados com sucesso!")
+        print("[Aniversario-App] Envio finalizado com sucesso!")
     except Exception as e:
-        print(f"[ERRO TELEGRAM] Falha real no envio: {e}")
+        print(f"[ERRO TELEGRAM] Falha critica ao postar no canal: {e}")
 
 def loop_relogio_diario():
-    print("[Aniversario-App] Sistema de contagem regressiva iniciado com sucesso.")
+    print("[Aniversario-App] Sistema de contagem regressiva iniciado.")
     while True:
         try:
             agora_br = datetime.now(timezone.utc) - timedelta(hours=3)
@@ -133,9 +126,9 @@ def home():
 
 @app.route('/testar')
 def testar_agora():
-    print("[Aniversario-App] Rota /testar acessada manualmente pelo navegador!")
+    print("[Aniversario-App] Rota de simulacao manual acionada.")
     Thread(target=gerar_e_enviar_sinais).start()
-    return "Processando testes em segundo plano... Olhe o painel de logs do Render!", 200
+    return "Processando testes em segundo plano... Verifique os logs do Render!", 200
 
 if __name__ == '__main__':
     thread_relogio = Thread(target=loop_relogio_diario)
