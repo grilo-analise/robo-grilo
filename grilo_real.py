@@ -64,7 +64,7 @@ def obtener_analise_profunda_api(fixture_id):
         if response.status_code == 200:
             dados = response.json().get("response", [])
             if dados:
-                item = dados if isinstance(dados, list) else dados
+                item = dados[0] if isinstance(dados, list) else dados
                 
                 percent = item.get("predictions", {}).get("percent", {})
                 analise["porcentagem_casa"] = percent.get("home", "50%")
