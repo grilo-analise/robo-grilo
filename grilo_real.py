@@ -12,13 +12,11 @@ sys.stdout.reconfigure(line_buffering=True)
 
 TOKEN = os.environ.get('TELEGRAM_TOKEN', '').strip()
 CHAT_ID = os.environ.get('CHAT_SINAIS_ID', '').strip()
-# Agora utilize a chave da RapidAPI do seu comando curl nesta variável de ambiente
 API_KEY = os.environ.get('API_SPORTS_KEY', '').strip()
 
 bot = telebot.TeleBot(TOKEN) if TOKEN else None
 app = Flask(__name__)
 
-# IDs de ligas adaptados para o padrão interno desta nova API
 LIGAS_ATIVAS = [
     "Brasileirão Série A", "Serie A", "Premier League", "LaLiga", 
     "Bundesliga", "Champions League", "Copa Libertadores"
@@ -33,7 +31,8 @@ def carregar_cache_local():
                 dados = json.load(f)
                 fuso_brasil = datetime.now(timezone.utc) - timedelta(hours=3)
                 hoje = fuso_brasil.strftime("%Y-%m-%d")
-                if dados.get("data") == today := hoje:
+                # CORREÇÃO AQUI: Comparação limpa e direta
+                if dados.get("data") == hoje:
                     return dados.get("jogos", []), dados.get("indice", 0)
         except Exception as e:
             print(f"[CACHE] Erro ao ler cache local: {e}")
@@ -54,7 +53,6 @@ def buscar_jogos_reais_na_api():
         print("[API ERRO] API_SPORTS_KEY (RapidAPI Key) nao configurada.")
         return []
 
-    # Estrutura base corrigida com base no seu comando CURL
     BASE_URL = "https://rapidapi.com"
     HEADERS = {
         "x-rapidapi-host": "://rapidapi.com",
@@ -63,18 +61,15 @@ def buscar_jogos_reais_na_api():
     
     try:
         print("[API] Buscando dados de jogadores/partidas na nova API...")
-        # Modificado o parâmetro fixo para 'm' conforme o seu curl original
         response = requests.get(BASE_URL, headers=HEADERS, params={"search": "m"}, timeout=12)
         
         if response.status_code == 200:
             dados = response.json()
             
-            # Validação do formato de resposta da Free API Live Football
             if "status" in dados and not dados["status"]:
                 print(f"[API ERRO REQUISICAO] Resposta negativa da API.")
                 return []
                 
-            # Tratamento dinâmico: mapeia os dados recebidos para simular a lista de jogos
             todos_jogos = dados.get("response", {}).get("players", [])
             
             if not todos_jogos:
@@ -136,13 +131,11 @@ def gerar_e_enviar_sinais():
     salvar_cache_local(jogos_cache, indice_atual)
 
     try:
-        # Extração de chaves adaptada para evitar quebras de KeyError no dicionário do JSON
         time_casa = item.get("name", "Time Mandante")
         time_fora = item.get("teamName", "Time Visitante")
         liga_nome = item.get("role", "Liga Principal")
         pais = item.get("countryCode", "BR").upper()
         
-        # Geração de horário dinâmico e seguro para evitar erros de fuso horário da API antiga
         horario_jogo = (datetime.now(timezone.utc) - timedelta(hours=3) + timedelta(minutes=random.randint(10, 240))).strftime("%H:%M")
 
         dados_reais = obtener_dados_simulados()
