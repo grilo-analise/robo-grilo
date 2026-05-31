@@ -24,30 +24,31 @@ print("==================================")
 bot = telebot.TeleBot(TOKEN) if TOKEN else None
 app = Flask(__name__)
 
-# LIGAS FECHADAS CORRETAMENTE PARA EVITAR ERRO DE SINTAXE:
+# CONFIGURADO COM SUCESSO
 LIGAS_ELITE = [1, 11, 71, 72, 39, 140, 2, 135, 78, 88]
 
 # --- TRATADORES DE COMANDO DO TELEGRAM (WEBHOOK) ---
-
 if bot:
     @bot.message_handler(commands=['start', 'help'])
     def send_welcome(message):
         print(f"[Telegram] Comando recebido de {message.chat.id}")
-        bot.reply_to(message, "Olá! Eu sou o Grilobot.\nMonitorando sinais nativos com sucesso no Render!")
+        try:
+            bot.reply_to(message, "Olá! Eu sou o Grilobot.\nMonitorando sinais nativos com sucesso no Render!")
+        except Exception as e:
+            print(f"[Telegram] Erro ao responder comando: {e}")
 
     @bot.message_handler(func=lambda message: True)
     def echo_all(message):
-        bot.reply_to(message, f"Recebi sua mensagem: {message.text}")
-
-# ---------------------------------------------------
+        try:
+            bot.reply_to(message, f"Recebi sua mensagem: {message.text}")
+        except Exception as e:
+            print(f"[Telegram] Erro no echo: {e}")
 
 def obtener_dados_simulados(time_casa, time_fora):
     p_casa = random.randint(35, 60)
     p_fora = random.randint(20, 40)
     p_empate = 100 - p_casa - p_fora
-    
     cenario_jogo = random.choice(["Mata-Mata (Decisão/Copa)", "Clássico Regional (Alta Tensão)", "Pontos Corridos (Briga por G4/Z4)"])
-    
     opcoes_desfalques = [
         f"⚠️ Crítico: Meio-campo titular e principal criador lesionado ({time_casa})",
         f"⚠️ Crítico: Primeiro volante de contenção suspenso por cartões ({time_fora})",
@@ -55,43 +56,29 @@ def obtener_dados_simulados(time_casa, time_fora):
         "DM Limpo (Ambas as equipes vêm com força máxima estrutural)"
     ]
     desfalques_sorteados = random.choice(opcoes_desfalques)
-    
     forma_casa = random.choice(["V-E-V-D-E", "D-D-V-V-E", "V-D-V-D-E"])
     forma_fora = random.choice(["E-V-D-D-V", "V-V-E-V-D", "D-E-D-V-V"])
     
     if "Meio-campo titular" in desfalques_sorteados or "Primeiro volante" in desfalques_sorteados:
-        conselho = f"🔥 ENTRADA DE VALOR NA ZEBRA: Setor de transição e meio-campo totalmente quebrado por desfalques críticos. O time adversário vai dominar a posse de bola. Indicação: Handicap (+) a favor da Zebra ou Dupla Chance."
+        conselho = f"🔥 ENTRADA DE VALOR NA ZEBRA: Setor de transição e meio-campo quebrado. Indicação: Handicap (+) ou Dupla Chance."
     elif cenario_jogo == "Mata-Mata (Decisão/Copa)":
-        conselho = f"🏆 JOGO DE GOLES/TRUNCADO: Cenário de extrema pressão tática e regulamento debaixo do braço. Menos espaço para erros. Indicação: Menos de 2.5 Gols na partida ou Empate Protegido (DNB)."
-    elif "D-D" in forma_casa and cenario_jogo == "Clássico Regional (Alta Tensão)":
-        conselho = f"⚠️ TENDÊNCIA DE ZEBRA EM CLÁSSICO: O mandante vem com instabilidade psicológica ({forma_casa}). Em clássico com o meio-campo pressionado, o valor está totalmente no mercado de contra-ataque do visitante."
+        conselho = f"🏆 JOGO DE GOLES/TRUNCADO: Cenário de extrema pressão tática. Indicação: Menos de 2.5 Gols ou DNB."
     else:
-        conselho = f"🔷 ANÁLISE DE CAMPO: Proposta de jogo vertical de ambos os lados. Sem desfalques no setor de criação. Indicação técnica: Mercado de Ambas Marcam (Sim) devido ao alto índice de finalizações."
+        conselho = f"🔷 ANÁLISE DE CAMPO: Proposta de jogo vertical. Indicação técnica: Ambas Marcam (Sim)."
 
     return {
-        "porcentagem_casa": f"{p_casa}%", 
-        "porcentagem_empate": f"{p_empate}%", 
-        "porcentagem_fora": f"{p_fora}%",
-        "ambas_marcam": f"{random.randint(48, 68)}%", 
-        "mais_25_gols": f"{random.randint(42, 65)}%",
-        "chutes_casa": f"{round(random.uniform(4.2, 5.9), 1)}", 
-        "chutes_fora": f"{round(random.uniform(3.2, 4.8), 1)}", 
-        "passes_casa": f"{random.randint(400, 490)}", 
-        "passes_fora": f"{random.randint(350, 420)}",
-        "cantos_estimados": f"{round(random.uniform(8.8, 10.8), 1)}", 
-        "penalti_decisao": random.choice(["NÃO", "SIM (Alta Tendência por VAR)"]), 
-        "vermelho_decisao": random.choice(["BAIXA", "MÉDIA", "ALTA (Clássico Quente)"]),
-        "h2h_historico": random.choice(["Equilibrado nos últimos duelos", "Vantagem tática histórica do Mandante", "Visitante costuma pontuar nesse estádio"]), 
-        "ultimos_5_casa": forma_casa, 
-        "ultimos_5_fora": forma_fora,
-        "cenario": cenario_jogo,
-        "desfalques": desfalques_sorteados,
-        "conselho": conselho
+        "porcentagem_casa": f"{p_casa}%", "porcentagem_empate": f"{p_empate}%", "porcentagem_fora": f"{p_fora}%",
+        "ambas_marcam": f"{random.randint(48, 68)}%", "mais_25_gols": f"{random.randint(42, 65)}%",
+        "chutes_casa": f"{round(random.uniform(4.2, 5.9), 1)}", "chutes_fora": f"{round(random.uniform(3.2, 4.8), 1)}", 
+        "passes_casa": f"{random.randint(400, 490)}", "passes_fora": f"{random.randint(350, 420)}",
+        "cantos_estimados": f"{round(random.uniform(8.8, 10.8), 1)}", "penalti_decisao": random.choice(["NÃO", "SIM"]), 
+        "vermelho_decisao": random.choice(["BAIXA", "MÉDIA", "ALTA"]), "h2h_historico": "Equilibrado nos últimos duelos", 
+        "ultimos_5_casa": forma_casa, "ultimos_5_fora": forma_fora, "cenario": cenario_jogo, "desfalques": desfalques_sorteados, "conselho": conselho
     }
 
 def gerar_e_enviar_sinais():
     if not bot or not CHAT_ID:
-        print("[ERRO SISTEMA] Envio cancelado: TOKEN ou CHAT_ID nao configurados no Render.")
+        print("[ERRO SISTEMA] Envio cancelado: TOKEN ou CHAT_ID nao configurados.")
         return
 
     fuso_brasil = datetime.now(timezone.utc) - timedelta(hours=3)
@@ -105,16 +92,17 @@ def gerar_e_enviar_sinais():
     jogos_elite = []
     
     try:
-        response = requests.get(url_jogos, headers=HEADERS, params=params, timeout=10)
-        if response.status_code == 200:
-            dados = response.json()
-            jogos = dados.get("response", [])
-            jogos_elite = [j for j in jogos if j.get("league", {}).get("id") in LIGAS_ELITE]
-    except Exception:
-        pass
+        if API_KEY:
+            response = requests.get(url_jogos, headers=HEADERS, params=params, timeout=10)
+            if response.status_code == 200:
+                dados = response.json()
+                jogos = dados.get("response", [])
+                jogos_elite = [j for j in jogos if j.get("league", {}).get("id") in LIGAS_ELITE]
+    except Exception as e:
+        print(f"[Aniversario-App] Falha ao consultar API: {e}")
 
     if not jogos_elite:
-        print("[Aniversario-App] API sem créditos ou erro. Usando banco de dados de contingência...")
+        print("[Aniversario-App] Usando banco de dados de contingência...")
         jogos_elite = [
             {"teams": {"home": {"name": "Real Madrid"}, "away": {"name": "Barcelona"}}, "league": {"name": "La Liga", "country": "Spain"}},
             {"teams": {"home": {"name": "Man City"}, "away": {"name": "Man United"}}, "league": {"name": "Premier League", "country": "England"}},
@@ -123,12 +111,16 @@ def gerar_e_enviar_sinais():
 
     try:
         print(f"[Aniversario-App] Inicializando envio de boletins...")
-        abertura = f"📢 *BOLETIM DE ANÁLISE GRILO V1*\n📅 *DATA:* {fuso_brasil.strftime('%d/%m/%Y')}\n📊 Filtrando desfalques no meio-campo e peso de decisões de campeonato..."
+        abertura = f"📢 *BOLETIM DE ANÁLISE GRILO V1*\n📅 *DATA:* {fuso_brasil.strftime('%d/%m/%Y')}\n📊 Filtrando dados..."
         
         try:
             bot.send_message(CHAT_ID, text=abertura, parse_mode="Markdown")
         except Exception:
-            bot.send_message(CHAT_ID, text="📢 BOLETIM DE ANÁLISE TÁTICA ATIVO")
+            try:
+                bot.send_message(CHAT_ID, text="📢 BOLETIM DE ANÁLISE TÁTICA ATIVO")
+            except Exception as e:
+                print(f"[ERRO CRÍTICO] Bot não conseguiu enviar mensagem pro Chat ID: {e}")
+                return
             
         time.sleep(2)
         
@@ -143,59 +135,68 @@ def gerar_e_enviar_sinais():
             mensagem = (
                 f"🕒 *HORÁRIO:* 16:00 | 📅 *DATA:* {fuso_brasil.strftime('%d/%m/%Y')}\n"
                 f"⚽ *COMPETIÇÃO:* {pais} - {liga_nome}\n"
-                f"📌 *CONTEXTO DO CONFRONTO:* {dados_reais['cenario']}\n"
-                f"⚔️ *PARTIDA:* {time_casa} ({dados_reais['porcentagem_casa']}) x ({dados_reais['porcentagem_fora']}) {time_fora}\n"
-                f"🤝 *CHANCE DE EMPATE:* {dados_reais['porcentagem_empate']}\n\n"
-                f"📊 *ÚLTIMOS 5 JOGOS (FORMA):*\n"
-                f"🏠 {time_casa}: `{dados_reais['ultimos_5_casa']}`\n"
-                f"🚀 {time_fora}: `{dados_reais['ultimos_5_fora']}`\n"
-                f"🔄 *HISTÓRICO RECENTE:* {dados_reais['h2h_historico']}\n\n"
-                f"📋 *ANÁLISE DE DESFALQUES:* {dados_reais['desfalques']}\n"
-                f"📊 [AMBAS MARCAM]: {dados_reais['ambas_marcam']} | 📈 [+2.5 GOLS]: {dados_reais['mais_25_gols']}\n"
-                f"🎯 [MÉDIA CHUTES NO GOL]: Casa: {dados_reais['chutes_casa']} | Fora: {dados_reais['chutes_fora']}\n"
-                f"🔄 [PASSES ESTIMADOS]: Casa: {dados_reais['passes_casa']} | Fora: {dados_reais['passes_fora']}\n"
-                f"🚩 [ESC_ESTIMADOS]: {dados_reais['cantos_estimados']} por partida\n"
-                f"🥅 [PROBABILIDADE PÊNALTI]: {dados_reais['penalti_decisao']}\n"
-                f"🟥 [TENDÊNCIA CARTÃO VERMELHO]: {dados_reais['vermelho_decisao']}\n\n"
-                f"🔷 *APOSTA DE VALOR SUGERIDA (CENÁRIO DE CAMPO):*\n"
-                f"{dados_reais['conselho']}\n"
-                f"=========================================="
+                f"📌 *CONTEXTO:* {dados_reais['cenario']}\n"
+                f"⚔️ *PARTIDA:* {time_casa} x {time_fora}\n"
+                f"🔷 *SUGESTÃO:* {dados_reais['conselho']}\n"
             )
-            bot.send_message(CHAT_ID, text=mensagem, parse_mode="Markdown")
-            print(f"[Aniversario-App] Boletim enviado: {time_casa} x {time_fora}")
-            time.sleep(2)
+            try:
+                bot.send_message(CHAT_ID, text=mensagem, parse_mode="Markdown")
+                print(f"[Aniversario-App] Boletim enviado: {time_casa} x {time_fora}")
+                time.sleep(2)
+            except Exception as e:
+                print(f"[Erro Envio Partida] {time_casa}: {e}")
             
-        print("[Aniversario-App] Todos os boletins do ciclo foram processados.")
+        print("[Aniversario-App] Todos os boletins foram processados.")
     except Exception as e:
-        print(f"[ERRO CRÍTICO TELEGRAM] Falha ao enviar boletim: {e}")
+        print(f"[ERRO GERAL TELEGRAM] Falha no fluxo: {e}")
 
 def loop_relogio_diario():
     print("[Aniversario-App] Sistema de contagem regressiva ativo.")
-    gerar_e_enviar_sinais()
-    
-    print("[Aniversario-App] Agenda de aniversarios fechada por hoje. Entrando em modo de espera noturno...")
-    print("[Aniversario-App] Boa noite, grilo! Monitoramento agendado automaticamente para as 05:00.")
+    # Executa dentro de um try/except isolado para nunca derrubar a Thread principal
+    try:
+        gerar_e_enviar_sinais()
+    except Exception as e:
+        print(f"[Thread Erro Inicial] {e}")
     
     while True:
         try:
             agora_br = datetime.now(timezone.utc) - timedelta(hours=3)
             if agora_br.strftime("%H:%M") == "05:00":
-                print("[Aniversario-App] Despertador acionado. Iniciando checagem de eventos diários...")
+                print("[Aniversario-App] Despertador acionado...")
                 gerar_e_enviar_sinais()
                 time.sleep(65)
             time.sleep(30)
-        except Exception:
+        except Exception as e:
+            print(f"[Thread Erro Loop] {e}")
             time.sleep(30)
 
 @app.route('/')
 def home(): 
-    return jsonify({
-        "status": "online",
-        "projeto": "Gerenciador de Eventos e Festas de Aniversario v1.2"
-    }), 200
+    return jsonify({"status": "online", "projeto": "Gerenciador Grilo v1.2"}), 200
 
 @app.route('/telegram', methods=['POST'])
 def telegram_webhook():
     if request.headers.get('content-type') == 'application/json':
         json_string = request.get_data().decode('utf-8')
         update = telebot.types.Update.de_json(json_string)
+        if bot:
+            try:
+                bot.process_new_updates([update])
+            except Exception as e:
+                print(f"[Webhook Erro Processamento] {e}")
+        return '', 200
+    else:
+        return jsonify({"error": "Metodo invalido"}), 403
+
+@app.route('/testar')
+def testar_agora():
+    Thread(target=gerar_e_enviar_sinais).start()
+    return "Processando analise tática pura... Olhe o Telegram!", 200
+
+if __name__ == '__main__':
+    thread_relogio = Thread(target=loop_relogio_diario)
+    thread_relogio.daemon = True
+    thread_relogio.start()
+    
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
