@@ -1,3 +1,4 @@
+
 import os
 import logging
 import requests
@@ -9,9 +10,11 @@ logger = logging.getLogger("ProtocoloGrilo")
 
 app = FastAPI(title="Analista Técnico de Sistemas - Protocolo Grilo V1")
 
-# Pegando suas variáveis salvas no painel do Render
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "SEU_TOKEN_AQUI")
-CHAT_ID = os.environ.get("CHAT_ID", "SEU_CHAT_ID_AQUI")
+# ==============================================================================
+# 🔑 COLE SUAS CREDENCIAIS REAIS AQUI DENTRO DAS ASPAS
+# ==============================================================================
+TELEGRAM_TOKEN = "COLE_AQUI_O_TOKEN_DO_SEU_BOT"
+CHAT_ID = "COLE_AQUI_O_ID_DO_SEU_CANAL_COM_MENOS_100"
 
 def enviar_mensagem_telegram(texto):
     """ Envia o bloco tático direto para o canal configurado """
@@ -22,12 +25,12 @@ def enviar_mensagem_telegram(texto):
         if response.status_code == 200:
             logger.info("📡 [Telegram] Palpites enviados com sucesso para o canal!")
         else:
-            logger.error(f"❌ Falha no envio: {response.text}")
+            logger.error(f"❌ Falha no envio. Resposta do Telegram: {response.text}")
     except Exception as e:
         logger.error(f"❌ Erro de conexão com o Telegram: {str(e)}")
 
 def executar_analise_da_rodada():
-    """ Módulo tático principal carregado com os jogos reais de hoje (31/05/2026). """
+    """ Módulo tático principal carregado com os jogos reais de hoje. """
     logger.info("🤖 [ML] Iniciando varredura tática da rodada de futebol...")
     
     mensagem_tactica = (
@@ -39,21 +42,23 @@ def executar_analise_da_rodada():
         "⚽ *Vasco da Gama vs Atlético-MG* (16h00)\n"
         "🎯 *Palpite do Robô:* Ambas Marcam (Sim)\n\n"
         "⚽ *Palmeiras vs Chapecoense* (16h00)\n"
-        "🎯 *Palmeta do Robô:* Vitória do Palmeiras HT\n\n"
+        "🎯 *Palpite do Robô:* Vitória do Palmeiras HT\n\n"
         "-----------------------------------------\n"
-        "⚙️ _Módulo ML: Aprendizado ativo_"
+        "⚙️ _Módulo ML: Inicialização Forçada Ativa (Sinais de Hoje)_"
     )
     enviar_mensagem_telegram(mensagem_tactica)
 
-# ==============================================================================
-# 🚀 LINK ENCURTADO E FACILITADO PARA O CELULAR (/grilo)
-# ==============================================================================
+# 🔥 DISPARA AUTOMATICAMENTE ASSIM QUE O ROBÔ LIGA NA NUVEM
+@app.on_event("startup")
+async def disparar_ao_ligar():
+    logger.info("⚡ Robô Grilo Inicializado! Forçando envio dos palpites da rodada...")
+    executar_analise_da_rodada()
+
 @app.get("/grilo")
 @app.post("/grilo")
 async def gatilho_curto(background_tasks: BackgroundTasks):
-    logger.info("⏰ Comando simplificado recebido! Processando palpites.")
     background_tasks.add_task(executar_analise_da_rodada)
-    return {"status": "Palpites enviados! Verifique o Telegram"}
+    return {"status": "Comando executado"}
 
 @app.get("/webhook")
 @app.post("/webhook")
