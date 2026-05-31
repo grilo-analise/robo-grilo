@@ -182,49 +182,10 @@ def gerar_e_enviar_sinais():
 @app.route('/')
 def home(): 
     jogos_cache, _ = carregar_cache_local()
-    html_painel = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>Painel Robo-Grilo</title>
-        <style>
-            body {{ font-family: Arial, sans-serif; text-align: center; background: #121212; color: white; padding-top: 50px; }}
-            .btn {{ background: #28a745; color: white; border: none; padding: 20px 40px; font-size: 20px; font-weight: bold; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }}
-            .btn:active {{ background: #1e7e34; transform: scale(0.98); }}
-            .status {{ margin-top: 20px; color: #aaa; font-size: 14px; }}
-        </style>
-    </head>
-    <body>
-        <h1>🦗 Painel de Controle - Robo Grilo</h1>
-        <p>Jogos reais salvos no sistema hoje: <strong>{len(jogos_cache)}</strong></p>
-        <br><br>
-        <form action="/executar-cron" method="GET">
-            <button type="submit" class="btn">🚀 MANDAR SINAL AGORA</button>
-        </form>
-        <p class="status">Modo: Disparo Manual + UptimeRobot</p>
-    </body>
-    </html>
-    """
-    return html_painel
+    total_jogos = len(jogos_cache)
+    return f"<h1>Painel Robo Grilo</h1><p>Jogos salvos hoje: {total_jogos}</p><br><a href='/executar-cron'><button style='padding:20px; font-size:20px;'>MANDAR SINAL AGORA</button></a>"
 
 @app.route('/executar-cron')
 def executar_cron():
     resultado = gerar_e_enviar_sinais()
-    html_resposta = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>Sinal Enviado</title>
-        <style>
-            body {{ font-family: Arial, sans-serif; text-align: center; background: #121212; color: white; padding-top: 80px; }}
-            .sucesso {{ color: #28a745; font-size: 24px; font-weight: bold; }}
-            .btn-voltar {{ background: #333; color: white; text-decoration: none; padding: 10px 20px; border-radius: 5px; display: inline-block; margin-top: 30px; }}
-        </style>
-    </head>
-    <body>
-        <div class="sucesso">✅ Comando Executado!</div>
-        <p>Resposta do Servidor: {resultado}</p>
+    return f"<h1>Status do Envio</h1><p>Resultado: {resultado}</p><br><a href='/'>Voltar ao Painel</a>"
