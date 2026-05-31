@@ -17,14 +17,7 @@ API_KEY = os.environ.get('API_SPORTS_KEY', '').strip()
 bot = telebot.TeleBot(TOKEN) if TOKEN else None
 app = Flask(__name__)
 
-LIGAS_ATIVAS = [
-    71, 72, 73, 74,
-    39, 140, 78, 135,
-    253, 255, 257,
-    2, 3, 5, 4, 9,
-    103, 106, 113,
-    283, 197, 218
-]
+LIGAS_ATIVAS = [71, 72, 73, 74, 39, 140, 78, 135, 253, 255, 257, 2, 3, 5, 4, 9, 103, 106, 113, 283, 197, 218]
 
 CACHE_FILE = "jogos_cache.json"
 
