@@ -17,13 +17,15 @@ API_KEY = os.environ.get('API_SPORTS_KEY', '').strip()
 bot = telebot.TeleBot(TOKEN) if TOKEN else None
 app = Flask(__name__)
 
+# Ampliado o catálogo de ligas para capturar mais jogos globais de madrugada/manhã
 LIGAS_ATIVAS = [
     71, 72, 73, 74,   # Brasileirão Série A, B, C e D
     39, 140, 78, 135, # Ligas Europeias (Premier, LaLiga, Bundesliga, Serie A)
     253, 255, 257,    # MLS (Estados Unidos) e ligas americanas
     2, 3, 5, 4, 9,    # Champions League, Europa League, Libertadores, Copa América, Copa do Mundo
     103, 106, 113,    # Ligas Sul-Americanas (Argentina, Chile, Colômbia)
-    283, 197, 218     # Outras ligas com alta frequência de jogos (Japão, México, etc.)
+    283, 197, 218,    # Outras ligas com alta frequência (Japão, México, etc.)
+    13, 10, 11, 61,   # Adicionado: Ligas de Portugal, Holanda, França e Arábia Saudita
 ]
 
 CACHE_FILE = "jogos_cache.json"
@@ -45,7 +47,8 @@ def salvar_cache_local(jogos, indice):
     try:
         fuso_brasil = datetime.now(timezone.utc) - timedelta(hours=3)
         hoje = fuso_brasil.strftime("%Y-%m-%d")
-        dados = {"data": today, "jogos": jogos, "indice": indice}
+        # CORRIGIDO: Modificado 'today' para 'hoje' para evitar NameError
+        dados = {"data": hoje, "jogos": jogos, "indice": indice} 
         with open(CACHE_FILE, "w", encoding="utf-8") as f:
             json.dump(dados, f, ensure_ascii=False, indent=4)
     except Exception as e:
@@ -73,10 +76,13 @@ def buscar_jogos_reais_na_api():
                 return []
                 
             todos_jogos = dados.get("response", [])
+            
+            # Filtragem inteligente para priorizar ligas principais
             jogos_filtrados = [j for j in todos_jogos if j.get("league", {}).get("id") in LIGAS_ATIVAS]
             
+            # Se não houver principais, consome TODAS as partidas disponíveis do dia no mundo
             if not jogos_filtrados and todos_jogos:
-                print("[API] Sem jogos nas ligas principais. Carregando ligas secundarias...")
+                print("[API] Sem jogos nas ligas principais. Carregando todas as partidas disponíveis do dia...")
                 jogos_filtrados = todos_jogos
 
             if jogos_filtrados:
@@ -127,6 +133,7 @@ def gerar_e_enviar_sinais():
             return "Nenhum jogo disponivel na API hoje."
 
     if indice_atual >= len(jogos_cache):
+        # Em vez de travar ou zerar sem novos dados, recicla a lista embaralhando de novo
         indice_atual = 0
         random.shuffle(jogos_cache)
 
@@ -190,8 +197,8 @@ def home():
         <title>Painel Robo-Grilo</title>
         <style>
             body {{ font-family: Arial, sans-serif; text-align: center; background: #121212; color: white; padding-top: 50px; }}
-            .btn {{ background: #007bff; color: white; border: none; padding: 20px 40px; font-size: 20px; font-weight: bold; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }}
-            .btn:active {{ background: #0056b3; transform: scale(0.98); }}
+            .btn {{ background: #28a745; color: white; border: none; padding: 20px 40px; font-size: 20px; font-weight: bold; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }}
+            .btn:active {{ background: #1e7e34; transform: scale(0.98); }}
             .status {{ margin-top: 20px; color: #aaa; font-size: 14px; }}
         </style>
     </head>
@@ -219,17 +226,3 @@ def executar_cron():
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <title>Sinal Enviado</title>
         <style>
-            body {{ font-family: Arial, sans-serif; text-align: center; background: #121212; color: white; padding-top: 80px; }}
-            .sucesso {{ color: #28a745; font-size: 24px; font-weight: bold; }}
-            .btn-voltar {{ background: #333; color: white; text-decoration: none; padding: 10px 20px; border-radius: 5px; display: inline-block; margin-top: 30px; }}
-        </style>
-    </head>
-    <body>
-        <div class="sucesso">✅ Comando Executado!</div>
-        <p>Resposta do Servidor: {resultado}</p>
-        <a href="/" class="btn-voltar">⬅️ Voltar para o Painel</a>
-    </body>
-    </html>
-    """
-    return html_resposta
-
