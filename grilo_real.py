@@ -22,7 +22,7 @@ app = Flask(__name__)
 HEADERS = {"x-apisports-key": API_KEY}
 BASE_URL = "https://api-sports.io"
 
-# LIGAS DE ELITE CORRIGIDAS (IDs válidos para a API-Sports)
+# LIGAS DE ELITE PREENCHIDAS PARA NÃO DAR ERRO
 LIGAS_ELITE = [71, 72, 39, 140, 78, 135]
 
 def obtener_desfalques_reais(fixture_id):
@@ -64,7 +64,7 @@ def obtener_analise_profunda_api(fixture_id):
         if response.status_code == 200:
             dados = response.json().get("response", [])
             if dados:
-                item = dados[0] if isinstance(dados, list) else dados
+                item = dados if isinstance(dados, list) else dados
                 
                 percent = item.get("predictions", {}).get("percent", {})
                 analise["porcentagem_casa"] = percent.get("home", "50%")
@@ -188,3 +188,4 @@ def loop_relogio_diario():
     while True:
         try:
             agora_br = datetime.now(timezone.utc) - timedelta(hours=3)
+            if agora_br.strftime("%H:%M") == "05:00":
