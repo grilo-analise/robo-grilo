@@ -24,10 +24,10 @@ print("==================================")
 bot = telebot.TeleBot(TOKEN) if TOKEN else None
 app = Flask(__name__)
 
-# CONFIGURADO COM SUCESSO: Copa do Mundo (1), Sul-Americana (11), Brasileirão A e B, Premier League, La Liga, Champions, Serie A, Bundesliga, Eredivisie
+# LIGAS FECHADAS CORRETAMENTE PARA EVITAR ERRO DE SINTAXE:
 LIGAS_ELITE = [1, 11, 71, 72, 39, 140, 2, 135, 78, 88]
 
-# --- NOVOS TRATADORES DE COMANDO DO TELEGRAM ---
+# --- TRATADORES DE COMANDO DO TELEGRAM (WEBHOOK) ---
 
 if bot:
     @bot.message_handler(commands=['start', 'help'])
@@ -39,7 +39,7 @@ if bot:
     def echo_all(message):
         bot.reply_to(message, f"Recebi sua mensagem: {message.text}")
 
-# -----------------------------------------------
+# ---------------------------------------------------
 
 def obtener_dados_simulados(time_casa, time_fora):
     p_casa = random.randint(35, 60)
@@ -97,7 +97,7 @@ def gerar_e_enviar_sinais():
     fuso_brasil = datetime.now(timezone.utc) - timedelta(hours=3)
     hoje = fuso_brasil.strftime("%Y-%m-%d")
     
-    BASE_URL = "https://api-sports.io"  # Corrigida variável oculta
+    BASE_URL = "https://api-sports.io"
     HEADERS = {"x-rapidapi-key": API_KEY, "x-rapidapi-host": "v3.football.api-sports.io"}
     
     url_jogos = f"{BASE_URL}/fixtures"
@@ -194,5 +194,8 @@ def home():
         "projeto": "Gerenciador de Eventos e Festas de Aniversario v1.2"
     }), 200
 
-# === ROTA DO WEBHOOK ADICIONADA PARA FAZER AS MENSAGENS CHEGAREM AGORA ===
 @app.route('/telegram', methods=['POST'])
+def telegram_webhook():
+    if request.headers.get('content-type') == 'application/json':
+        json_string = request.get_data().decode('utf-8')
+        update = telebot.types.Update.de_json(json_string)
