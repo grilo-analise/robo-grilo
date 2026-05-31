@@ -15,19 +15,15 @@ sys.stdout.reconfigure(line_buffering=True)
 # Coleta com fallback seguro das credenciais do Render
 TOKEN = os.environ.get('TELEGRAM_TOKEN', '').strip()
 CHAT_ID = os.environ.get('CHAT_SINAIS_ID', '').strip()
-API_KEY = os.environ.get('API_SPORTS_KEY', '').strip()
 
 bot = telebot.TeleBot(TOKEN) if TOKEN else None
 app = Flask(__name__)
-
-LIGAS_ELITE = [71, 72, 39, 140, 78, 135]
 
 def obter_dados_simulados(time_casa, time_fora):
     p_casa = random.randint(40, 65)
     p_fora = random.randint(15, 35)
     p_empate = 100 - p_casa - p_fora
     
-    # Lista de cenários táticos dinâmicos para o cabeçalho
     cenarios = [
         "Vantagem tática histórica do Mandante",
         "Clássico Regional (Alta Tensão)",
@@ -36,7 +32,6 @@ def obter_dados_simulados(time_casa, time_fora):
     ]
     cenario_jogo = random.choice(cenarios)
     
-    # Opções de desfalques idênticas à sua foto
     opcoes_desfalques = [
         f"⚠️ Crítico: Meio-campo titular e principal criador lesionado ({time_casa})",
         f"⚠️ Crítico: Primeiro volante de contenção suspenso por cartões ({time_fora})",
@@ -45,7 +40,6 @@ def obter_dados_simulados(time_casa, time_fora):
     ]
     desfalques_sorteados = random.choice(opcoes_desfalques)
     
-    # Inteligência de conselho baseada no desfalque sorteado
     if "Crítico" in desfalques_sorteados:
         conselho = "🔥 ENTRADA DE VALOR NA ZEBRA: Setor de transição e meio-campo totalmente quebrado por desfalques\nIndicação: Handicap (+) a favor da Zebra ou Dupla Chance."
     elif cenario_jogo == "Clássico Regional (Alta Tensão)":
@@ -81,7 +75,7 @@ def gerar_e_enviar_sinais():
 
     fuso_brasil = datetime.now(timezone.utc) - timedelta(hours=3)
     
-    # Base de dados fixa conforme o seu modelo estrutural enviado
+    # Base de dados estrutural para montagem do layout do modelo
     jogos_elite = [
         {"teams": {"home": {"name": "Real Madrid"}, "away": {"name": "Barcelona"}}, "league": {"name": "La Liga", "country": "Spain"}},
         {"teams": {"home": {"name": "Man City"}, "away": {"name": "Man United"}}, "league": {"name": "Premier League", "country": "England"}},
@@ -89,13 +83,13 @@ def gerar_e_enviar_sinais():
     ]
 
     try:
-        print(f"[Aniversario-App] Conectando ao Chat ID: {CHAT_ID}")
-        abertura = f"📢 *BOLETIM DE ANÁLISE GRILO V1*\n📅 *DATA:* {fuso_brasil.strftime('%d/%m/%Y')}\n📊 Estruturando Painel Visual..."
+        print(f"[Bot] Conectando ao Chat ID: {CHAT_ID}")
+        abertura = f"📢 *BOLETIM DE ANÁLISE GRILO V1*\n📅 *DATA:* {fuso_brasil.strftime('%d/%m/%Y')} - {fuso_brasil.strftime('%H:%M')}\n📊 Atualizando Painel Estatístico..."
         
         try:
             bot.send_message(CHAT_ID, text=abertura, parse_mode="Markdown")
         except Exception:
-            bot.send_message(CHAT_ID, text="📢 BOLETIM ATIVO - PROCESSANDO JOGOS DIÁRIOS...")
+            bot.send_message(CHAT_ID, text="📢 BOLETIM ATIVO - PROCESSANDO LISTAGEM...")
             
         time.sleep(1)
         
@@ -107,9 +101,8 @@ def gerar_e_enviar_sinais():
             
             dados = obter_dados_simulados(time_casa, time_fora)
             
-            # Montagem do layout idêntica ao print enviado (sem colchetes, com emojis 📊, 🎯, 🟥, 🔷)
             mensagem = (
-                f"🕒 *HORÁRIO:* 16:00 | 📅 *DATA:* {fuso_brasil.strftime('%d/%m/%Y')}\n"
+                f"🕒 *HORÁRIO:* {fuso_brasil.strftime('%H:%M')} | 📅 *DATA:* {fuso_brasil.strftime('%d/%m/%Y')}\n"
                 f"⚽ *COMPETIÇÃO:* {pais} - {liga_nome}\n"
                 f"📌 *CONTEXTO:* {dados['cenario']}\n"
                 f"⚔️ *PARTIDA:* {time_casa} ({dados['porcentagem_casa']}) x ({dados['porcentagem_fora']}) {time_fora}\n"
@@ -133,45 +126,43 @@ def gerar_e_enviar_sinais():
             
             try:
                 bot.send_message(CHAT_ID, text=mensagem, parse_mode="Markdown")
-                print(f"[Aniversario-App] Mensagem enviada: {time_casa} x {time_fora}")
+                print(f"[Bot] Mensagem enviada para: {time_casa} x {time_fora}")
                 time.sleep(1)
             except Exception as e:
-                # Fallback sem markdown caso ocorra erro com caracteres especiais dos nomes
                 bot.send_message(CHAT_ID, text=mensagem.replace('*', ''))
-                print(f"[Telegram Fallback] Mensagem enviada sem Markdown: {e}")
+                print(f"[Bot Fallback] Erro na formatação: {e}")
             
-        print("[Aniversario-App] Ciclo de postagens concluido com sucesso.")
+        print("[Bot] Ciclo de postagens concluído.")
     except Exception as e:
-        print(f"[ERRO CRÍTICO TELEGRAM] Falha ao tentar postar mensagens: {e}")
+        print(f"[ERRO TELEGRAM] Falha geral de rede: {e}")
 
 def loop_relogio_diario():
-    print("[Aniversario-App] Sistema de contagem regressiva iniciado.")
-    # Força o disparo imediato para conferência assim que o bot liga
+    print("[Relógio] Iniciado com intervalo fixo de 5 minutos.")
+    # Executa imediatamente assim que liga
     gerar_e_enviar_sinais()
     
     while True:
         try:
-            agora_br = datetime.now(timezone.utc) - timedelta(hours=3)
-            if agora_br.strftime("%H:%M") == "05:00":
-                gerar_e_enviar_sinais()
-                time.sleep(65)
-            time.sleep(30)
-        except Exception:
+            # Aguarda exatamente 5 minutos (300 segundos) para o próximo disparo
+            time.sleep(300)
+            print("[Relógio] Iniciando disparo cíclico de 5 minutos...")
+            gerar_e_enviar_sinais()
+        except Exception as e:
+            print(f"[Erro Relógio] {e}")
             time.sleep(30)
 
 @app.route('/')
 def home(): 
     return jsonify({
         "status": "online",
-        "projeto": "Gerenciador de Eventos e Festas de Aniversario v1.2",
-        "layout": "Visual Grilo V1 Completo"
+        "projeto": "Gerenciador Grilo Loop V1",
+        "configuracao": "Loop 5min - Consumo API Zero"
     }), 200
 
 @app.route('/testar')
 def testar_agora():
-    print("[Aniversario-App] Rota de simulacao manual acionada.")
     Thread(target=gerar_e_enviar_sinais).start()
-    return "Processando testes em segundo plano... Verifique o Telegram!", 200
+    return "Processando disparo de teste em segundo plano...", 200
 
 if __name__ == '__main__':
     thread_relogio = Thread(target=loop_relogio_diario)
