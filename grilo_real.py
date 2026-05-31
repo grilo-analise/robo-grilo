@@ -4,12 +4,14 @@ import sys
 import json
 import telebot
 import requests
-import random
+import time
+from threading import Thread
 from datetime import datetime, timedelta, timezone
 from flask import Flask, jsonify
 
 sys.stdout.reconfigure(line_buffering=True)
 
+# Coleta de credenciais do ambiente (Render)
 TOKEN = os.environ.get('TELEGRAM_TOKEN', '').strip()
 CHAT_ID = os.environ.get('CHAT_SINAIS_ID', '').strip()
 API_KEY = os.environ.get('API_SPORTS_KEY', '').strip()
@@ -17,164 +19,188 @@ API_KEY = os.environ.get('API_SPORTS_KEY', '').strip()
 bot = telebot.TeleBot(TOKEN) if TOKEN else None
 app = Flask(__name__)
 
-LIGAS_ATIVAS = [
-    "Brasileirão Série A", "Serie A", "Premier League", "LaLiga", 
-    "Bundesliga", "Champions League", "Copa Libertadores"
-]
+# IDs oficiais da API-Football para ligas de elite (ex: Brasileirão, Premier League, Champions)
+LIGAS_ELITE = [71, 39, 140, 135, 78, 2] 
 
-CACHE_FILE = "jogos_cache.json"
-
-def carregar_cache_local():
-    if os.path.exists(CACHE_FILE):
-        try:
-            with open(CACHE_FILE, "r", encoding="utf-8") as f:
-                dados = json.load(f)
-                fuso_brasil = datetime.now(timezone.utc) - timedelta(hours=3)
-                hoje = fuso_brasil.strftime("%Y-%m-%d")
-                # CORREÇÃO AQUI: Comparação limpa e direta
-                if dados.get("data") == hoje:
-                    return dados.get("jogos", []), dados.get("indice", 0)
-        except Exception as e:
-            print(f"[CACHE] Erro ao ler cache local: {e}")
-    return [], 0
-
-def salvar_cache_local(jogos, indice):
-    try:
-        fuso_brasil = datetime.now(timezone.utc) - timedelta(hours=3)
-        hoje = fuso_brasil.strftime("%Y-%m-%d")
-        dados = {"data": hoje, "jogos": jogos, "indice": indice} 
-        with open(CACHE_FILE, "w", encoding="utf-8") as f:
-            json.dump(dados, f, ensure_ascii=False, indent=4)
-    except Exception as e:
-        print(f"[CACHE] Erro ao salvar cache local: {e}")
-
-def buscar_jogos_reais_na_api():
+def puxar_jogos_reais_da_api():
+    """Busca os jogos do dia atual para as ligas selecionadas na API-Football"""
     if not API_KEY:
-        print("[API ERRO] API_SPORTS_KEY (RapidAPI Key) nao configurada.")
+        print("[ERRO API] API_SPORTS_KEY nao configurada nas variaveis de ambiente.")
         return []
 
-    BASE_URL = "https://rapidapi.com"
-    HEADERS = {
-        "x-rapidapi-host": "://rapidapi.com",
-        "x-rapidapi-key": API_KEY
+    # Define a data de hoje no formato AAAA-MM-DD
+    fuso_brasil = datetime.now(timezone.utc) - timedelta(hours=3)
+    data_hoje = fuso_brasil.strftime("%Y-%m-%d")
+    
+    url = "https://api-sports.io"
+    headers = {
+        'x-rapidapi-host': "v3.football.api-sports.io",
+        'x-rapidapi-key': API_KEY
+    }
+    
+    jogos_filtrados = []
+    
+    # Faz uma chamada para trazer os jogos de hoje
+    params = {"date": data_hoje}
+    
+    try:
+        response = requests.get(url, headers=headers, params=params, timeout=15)
+        if response.status_code != 200:
+            print(f"[ERRO API] Status HTTP Inválido: {response.status_code}")
+            return []
+            
+        dados = response.json()
+        fixtures = dados.get("response", [])
+        
+        # Filtra apenas os jogos que pertencem às nossas ligas de elite
+        for f in fixtures:
+            league_id = f.get("league", {}).get("id")
+            if league_id in LIGAS_ELITE:
+                # Extrai o horário correto convertido para o fuso do Brasil
+                utc_date = f.get("fixture", {}).get("date")
+                horario_br = "Definir"
+                if utc_date:
+                    try:
+                        # Conversão básica de string UTC para horário BR (-3h)
+                        dt = datetime.fromisoformat(utc_date.replace('Z', '+00:00'))
+                        dt_br = dt.astimezone(timezone(timedelta(hours=-3)))
+                        horario_br = dt_br.strftime("%H:%M")
+                    except Exception:
+                        horario_br = "16:00"
+
+                jogos_filtrados.append({
+                    "id_jogo": f.get("fixture", {}).get("id"),
+                    "horario": horario_br,
+                    "liga_nome": f.get("league", {}).get("name"),
+                    "pais": f.get("league", {}).get("country", "").upper(),
+                    "time_casa": f.get("teams", {}).get("home", {}).get("name"),
+                    "time_fora": f.get("teams", {}).get("away", {}).get("name")
+                })
+        
+        print(f"[API] Sucesso! Encontrados {len(jogos_filtrados)} jogos importantes para hoje.")
+        return jogos_filtrados
+        
+    except Exception as e:
+        print(f"[ERRO CRÍTICO API] Falha ao conectar na API-Football: {e}")
+        return []
+
+def puxar_estatisticas_historicas(id_jogo):
+    """Busca predições e dados estatísticos reais do confronto direto"""
+    url = f"https://api-sports.io"
+    headers = {
+        'x-rapidapi-host': "v3.football.api-sports.io",
+        'x-rapidapi-key': API_KEY
+    }
+    params = {"fixture": id_jogo}
+    
+    # Valores padrão de segurança caso a API não tenha dados daquele jogo específico
+    dados_padrao = {
+        "p_casa": "33%", "p_empate": "34%", "p_fora": "33%",
+        "conselho": "Análise em tempo real manual", "ambas_marcam": "Não Informado"
     }
     
     try:
-        print("[API] Buscando dados de jogadores/partidas na nova API...")
-        response = requests.get(BASE_URL, headers=HEADERS, params={"search": "m"}, timeout=12)
-        
+        response = requests.get(url, headers=headers, params=params, timeout=10)
         if response.status_code == 200:
-            dados = response.json()
-            
-            if "status" in dados and not dados["status"]:
-                print(f"[API ERRO REQUISICAO] Resposta negativa da API.")
-                return []
+            res_json = response.json()
+            lista_resp = res_json.get("response", [])
+            if lista_resp:
+                pred = lista_resp[0]
+                percentuais = pred.get("predictions", {}).get("percent", {})
+                conselho = pred.get("predictions", {}).get("advice", "Sem recomendação")
+                ambas = pred.get("predictions", {}).get("btts", "N/A")
                 
-            todos_jogos = dados.get("response", {}).get("players", [])
-            
-            if not todos_jogos:
-                print("[API] Nenhuns dados encontrados para a busca realizada.")
-                return []
-
-            random.shuffle(todos_jogos)
-            print(f"[API] Sucesso! {len(todos_jogos)} registros carregados e simulados como partidas.")
-            return todos_jogos
-        else:
-            print(f"[API ERRO HTTP] Codigo: {response.status_code}")
+                return {
+                    "p_casa": percentuais.get("home", "33%"),
+                    "p_empate": percentuais.get("draw", "34%"),
+                    "p_fora": percentuais.get("away", "33%"),
+                    "conselho": conselho,
+                    "ambas_marcam": "Sim" if ambas is True else ("Não" if ambas is False else "50%")
+                }
     except Exception as e:
-        print(f"[API FALHA CRITICA] Erro: {e}")
-    return []
-
-def obtener_dados_simulados():
-    p_casa = random.randint(40, 65)
-    p_fora = random.randint(15, 35)
-    p_empate = 100 - p_casa - p_fora
-    return {
-        "porcentagem_casa": f"{p_casa}%", 
-        "porcentagem_empate": f"{p_empate}%", 
-        "porcentagem_fora": f"{p_fora}%",
-        "ambas_marcam": f"{random.randint(45, 65)}%", 
-        "mais_25_gols": f"{random.randint(40, 60)}%",
-        "chutes_casa": f"{round(random.uniform(4.0, 5.8), 1)}", 
-        "chutes_fora": f"{round(random.uniform(3.0, 4.5), 1)}", 
-        "passes_casa": f"{random.randint(390, 480)}", 
-        "passes_fora": f"{random.randint(340, 410)}",
-        "cantos_estimados": f"{round(random.uniform(8.5, 10.5), 1)}", 
-        "penalti_decisao": random.choice(["NAO", "SIM (Alta Tendencia)"]), 
-        "vermelho_decisao": random.choice(["BAIXA", "MEDIA"]),
-        "h2h_historico": random.choice(["Equilibrado", "Vantagem Casa", "Vantagem Fora"]), 
-        "ultimos_5_casa": random.choice(["V-E-V-D-E", "V-V-E-D-V", "E-D-V-V-E"]), 
-        "ultimos_5_fora": random.choice(["E-V-D-D-V", "D-E-V-D-D", "E-E-V-D-E"]),
-        "conselho": random.choice(["Dupla Chance (Casa ou Empate)", "Ambas Marcam (Sim)", "Mais de 1.5 Gols", "Handicap Mandante (+)"])
-    }
+        print(f"[ERRO ESTATÍSTICA] Não foi possível ler dados do jogo {id_jogo}: {e}")
+        
+    return dados_padrao
 
 def gerar_e_enviar_sinais():
     if not bot or not CHAT_ID:
-        print("[ERRO SISTEMA] TOKEN ou CHAT_ID nao configurados.")
-        return "Erro de configuracao de credenciais."
+        print("[ERRO SISTEMA] Envio cancelado: TOKEN ou CHAT_ID nao configurados no Render.")
+        return
 
     fuso_brasil = datetime.now(timezone.utc) - timedelta(hours=3)
-    jogos_cache, indice_atual = carregar_cache_local()
-        
-    if not jogos_cache:
-        jogos_cache = buscar_jogos_reais_na_api()
-        indice_atual = 0
-        if not jogos_cache:
-            return "Nenhum dado disponivel na API hoje."
-
-    if indice_atual >= len(jogos_cache):
-        indice_atual = 0
-        random.shuffle(jogos_cache)
-
-    item = jogos_cache[indice_atual]
-    indice_atual += 1
-    salvar_cache_local(jogos_cache, indice_atual)
+    
+    print("[Aniversario-App] Buscando partidas reais do dia...")
+    jogos_reais = puxar_jogos_reais_da_api()
+    
+    if not jogos_reais:
+        print("[Aniversario-App] Nenhum jogo de liga elite agendado para hoje ou erro de conexão.")
+        return
 
     try:
-        time_casa = item.get("name", "Time Mandante")
-        time_fora = item.get("teamName", "Time Visitante")
-        liga_nome = item.get("role", "Liga Principal")
-        pais = item.get("countryCode", "BR").upper()
+        print(f"[Aniversario-App] Disparando conexao com o Chat ID: {CHAT_ID}")
+        abertura = f"📢 BOLETIM DE ANÁLISE GRILO V1\n📅 DATA: {fuso_brasil.strftime('%d/%m/%Y')}\n📊 Coletando dados em tempo real da API..."
         
-        horario_jogo = (datetime.now(timezone.utc) - timedelta(hours=3) + timedelta(minutes=random.randint(10, 240))).strftime("%H:%M")
-
-        dados_reais = obtener_dados_simulados()
+        bot.send_message(CHAT_ID, text=abertura)
+        time.sleep(2) # Pausa estratégica para evitar spam block do Telegram
         
-        mensagem = (
-            f"🕒 HORÁRIO: {horario_jogo} | 📅 DATA: {fuso_brasil.strftime('%d/%m/%Y')}\n"
-            f"⚽ COMPETIÇÃO: {pais} - {liga_nome}\n"
-            f"⚔️ PARTIDA: {time_casa} ({dados_reais['porcentagem_casa']}) x ({dados_reais['porcentagem_fora']}) {time_fora}\n"
-            f"🤝 CHANCE DE EMPATE: {dados_reais['porcentagem_empate']}\n\n"
-            f"📊 ÚLTIMOS 5 JOGOS (FORMA):\n"
-            f"🏠 {time_casa}: {dados_reais['ultimos_5_casa']}\n"
-            f"🚀 {time_fora}: {dados_reais['ultimos_5_fora']}\n"
-            f"🔄 HISTÓRICO DE DUELOS (H2H): {dados_reais['h2h_historico']}\n\n"
-            f"📋 DESFALQUES: DM Limpo\n"
-            f"📊 AMBAS MARCAM: {dados_reais['ambas_marcam']} | 📈 +2.5 GOLS: {dados_reais['mais_25_gols']}\n"
-            f"🎯 MÉDIA CHUTES NO GOL: Casa: {dados_reais['chutes_casa']} | Fora: {dados_reais['chutes_fora']}\n"
-            f"🔄 PASSES ESTIMADOS: Casa: {dados_reais['passes_casa']} | Fora: {dados_reais['passes_fora']}\n"
-            f"🚩 ESC_ESTIMADOS: {dados_reais['cantos_estimados']} por partida\n"
-            f"🥅 PROBABILIDADE PÊNALTI: {dados_reais['penalti_decisao']}\n"
-            f"🟥 TENDÊNCIA CARTÃO VERMELHO: {dados_reais['vermelho_decisao']}\n\n"
-            f"🔷 APOSTA DE VALOR SUGERIDA:\n"
-            f"{dados_reais['conselho']}\n"
-            f"=========================================="
-        )
-        
-        bot.send_message(CHAT_ID, text=mensagem)
-        print(f"[Bot Real] Sinal gerado: {time_casa} x {time_fora}")
-        return f"Sucesso: {time_casa} x {time_fora}"
+        for jogo in jogos_reais:
+            # Puxa as probabilidades reais geradas pelos analistas da API para este confronto
+            stats = puxar_estatisticas_historicas(jogo["id_jogo"])
+            
+            mensagem = (
+                f"🕒 HORÁRIO: {jogo['horario']} | 📅 DATA: {fuso_brasil.strftime('%d/%m/%Y')}\n"
+                f"⚽ COMPETIÇÃO: {jogo['pais']} - {jogo['liga_nome']}\n"
+                f"⚔️ PARTIDA: {jogo['time_casa']} ({stats['p_casa']}) x ({stats['p_fora']}) {jogo['time_fora']}\n"
+                f"🤝 CHANCE DE EMPATE: {stats['p_empate']}\n\n"
+                f"📊 DADOS DE MERCADO REAL:\n"
+                f"📋 [AMBAS MARCAM]: {stats['ambas_marcam']}\n"
+                f"🔷 APOSTA DE VALOR SUGERIDA:\n"
+                f"💡 {stats['conselho']}\n"
+                f"=========================================="
+            )
+            bot.send_message(CHAT_ID, text=mensagem)
+            print(f"[Aniversario-App] Mensagem REAL enviada: {jogo['time_casa']} x {jogo['time_fora']}")
+            
+            # Pausa de 2 segundos entre as requisições para respeitar o limite de velocidade (Rate Limit) da API
+            time.sleep(2)
+            
+        print("[Aniversario-App] Ciclo de postagens concluido com dados reais.")
     except Exception as e:
-        print(f"[ERRO TELEGRAM] Falha ao enviar: {e}")
-        return f"Erro no envio: {e}"
+        print(f"[ERRO CRÍTICO TELEGRAM] Falha ao postar mensagens: {e}")
+
+def loop_relogio_diario():
+    print("[Aniversario-App] Sistema de contagem regressiva iniciado.")
+    # Executa o comando imediatamente ao ligar o servidor para validar a API nos logs
+    gerar_e_enviar_sinais()
+    
+    while True:
+        try:
+            agora_br = datetime.now(timezone.utc) - timedelta(hours=3)
+            # Executa a rotina automaticamente todos os dias às 05:00 da manhã
+            if agora_br.strftime("%H:%M") == "05:00":
+                gerar_e_enviar_sinais()
+                time.sleep(65)
+            time.sleep(30)
+        except Exception:
+            time.sleep(30)
 
 @app.route('/')
 def home(): 
-    jogos_cache, _ = carregar_cache_local()
-    total_jogos = len(jogos_cache)
-    return f"<h1>Painel Robo Grilo</h1><p>Jogos salvos hoje: {total_jogos}</p><br><a href='/executar-cron'><button style='padding:20px; font-size:20px;'>MANDAR SINAL AGORA</button></a>"
+    return jsonify({
+        "status": "online",
+        "projeto": "Gerenciador de Sinais Esportivos Real v1.5"
+    }), 200
 
-@app.route('/executar-cron')
-def executar_cron():
-    resultado = gerar_e_enviar_sinais()
-    return f"<h1>Status do Envio</h1><p>Resultado: {resultado}</p><br><a href='/'>Voltar ao Painel</a>"
+@app.route('/testar')
+def testar_agora():
+    print("[Aniversario-App] Rota de simulacao manual acionada.")
+    Thread(target=gerar_e_enviar_sinais).start()
+    return "Processando testes em segundo plano... Verifique os logs do Render!", 200
+
+if __name__ == '__main__':
+    thread_relogio = Thread(target=loop_relogio_diario)
+    thread_relogio.daemon = True
+    thread_relogio.start()
+    
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
