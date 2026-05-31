@@ -12,22 +12,17 @@ from flask import Flask, request, jsonify
 
 sys.stdout.reconfigure(line_buffering=True)
 
-TOKEN = os.environ.get('TELEGRAM_TOKEN', '')
-CHAT_ID = os.environ.get('CHAT_SINAIS_ID', '')
-API_KEY = os.environ.get('API_SPORTS_KEY', '')
-
-print("=== VERIFICAÇÃO DE CREDENCIAIS ===")
-print(f"TOKEN carregado: {'SIM (Configurado)' if TOKEN else 'NÃO (Vazio!)'}")
-print(f"CHAT_ID carregado: {'SIM (Configurado)' if CHAT_ID else 'NÃO (Vazio!)'}")
-print("==================================")
+# Coleta com fallback seguro
+TOKEN = os.environ.get('TELEGRAM_TOKEN', '').strip()
+CHAT_ID = os.environ.get('CHAT_SINAIS_ID', '').strip()
+API_KEY = os.environ.get('API_SPORTS_KEY', '').strip()
 
 bot = telebot.TeleBot(TOKEN) if TOKEN else None
 app = Flask(__name__)
 
-# IDS INSERIDOS DIRETO PARA ELIMINAR O SYNTAXERROR DE VEZ
 LIGAS_ELITE = [71, 72, 39, 140, 78, 135]
 
-def obtener_dados_simulados():
+def obter_dados_simulados():
     p_casa = random.randint(40, 65)
     p_fora = random.randint(15, 35)
     p_empate = 100 - p_casa - p_fora
@@ -52,11 +47,10 @@ def obtener_dados_simulados():
 
 def gerar_e_enviar_sinais():
     if not bot or not CHAT_ID:
-        print("[ERRO] Envio cancelado: TOKEN ou CHAT_ID nao foram configurados no painel do Render.")
+        print("[ERRO SISTEMA] Envio cancelado: TOKEN ou CHAT_ID nao configurados no Render.")
         return
 
     fuso_brasil = datetime.now(timezone.utc) - timedelta(hours=3)
-    hoje = fuso_brasil.strftime("%Y-%m-%d")
     
     jogos_elite = [
         {"teams": {"home": {"name": "Real Madrid"}, "away": {"name": "Barcelona"}}, "league": {"name": "La Liga", "country": "Spain"}},
@@ -65,9 +59,15 @@ def gerar_e_enviar_sinais():
     ]
 
     try:
-        print("[Aniversario-App] Tentando enviar sinais de contingência...")
-        abertura = f"📢 *BOLETIM DE ANÁLISE GRILO V1*\n📅 *DATA:* {fuso_brasil.strftime('%d/%m/%Y')}\n📊 Estruturando Painel Visual de Jogos Profissionais..."
-        bot.send_message(CHAT_ID, text=abertura, parse_mode="Markdown")
+        print(f"[Aniversario-App] Disparando conexao com o Chat ID: {CHAT_ID}")
+        abertura = f"📢 BOLETIM DE ANÁLISE GRILO V1\n📅 DATA: {fuso_brasil.strftime('%d/%m/%Y')}\n📊 Estruturando Painel Visual..."
+        
+        # Tenta enviar texto simples primeiro para evitar erros de formatação Markdown
+        try:
+            bot.send_message(CHAT_ID, text=abertura)
+        except Exception:
+            bot.send_message(CHAT_ID, text="📢 BOLETIM ATIVO - PROCESSANDO JOGOS DIÁRIOS...")
+            
         time.sleep(1)
         
         for item in jogos_elite:
@@ -76,37 +76,42 @@ def gerar_e_enviar_sinais():
             liga_nome = item["league"]["name"]
             pais = item["league"]["country"].upper()
             
-            dados_reais = obtener_dados_simulados()
+            dados_reais = obter_dados_simulados()
             
             mensagem = (
-                f"🕒 *HORÁRIO:* 16:00 | 📅 *DATA:* {fuso_brasil.strftime('%d/%m/%Y')}\n"
-                f"⚽ *COMPETIÇÃO:* {pais} - {liga_nome}\n"
-                f"⚔️ *PARTIDA:* {time_casa} ({dados_reais['porcentagem_casa']}) x ({dados_reais['porcentagem_fora']}) {time_fora}\n"
-                f"🤝 *CHANCE DE EMPATE:* {dados_reais['porcentagem_empate']}\n\n"
-                f"📊 *ÚLTIMOS 5 JOGOS (FORMA):*\n"
-                f"🏠 {time_casa}: `{dados_reais['ultimos_5_casa']}`\n"
-                f"🚀 {time_fora}: `{dados_reais['ultimos_5_fora']}`\n"
-                f"🔄 *HISTÓRICO DE DUELOS (H2H):* {dados_reais['h2h_historico']}\n\n"
-                f"📋 *DESFALQUES:* DM Limpo\n"
+                f"🕒 HORÁRIO: 16:00 | 📅 DATA: {fuso_brasil.strftime('%d/%m/%Y')}\n"
+                f"⚽ COMPETIÇÃO: {pais} - {liga_nome}\n"
+                f"⚔️ PARTIDA: {time_casa} ({dados_reais['porcentagem_casa']}) x ({dados_reais['porcentagem_fora']}) {time_fora}\n"
+                f"🤝 CHANCE DE EMPATE: {dados_reais['porcentagem_empate']}\n\n"
+                f"📊 ÚLTIMOS 5 JOGOS (FORMA):\n"
+                f"🏠 {time_casa}: {dados_reais['ultimos_5_casa']}\n"
+                f"🚀 {time_fora}: {dados_reais['ultimos_5_fora']}\n"
+                f"🔄 HISTÓRICO DE DUELOS (H2H): {dados_reais['h2h_historico']}\n\n"
+                f"📋 DESFALQUES: DM Limpo\n"
                 f"📊 [AMBAS MARCAM]: {dados_reais['ambas_marcam']} | 📈 [+2.5 GOLS]: {dados_reais['mais_25_gols']}\n"
                 f"🎯 [MÉDIA CHUTES NO GOL]: Casa: {dados_reais['chutes_casa']} | Fora: {dados_reais['chutes_fora']}\n"
                 f"🔄 [PASSES ESTIMADOS]: Casa: {dados_reais['passes_casa']} | Fora: {dados_reais['passes_fora']}\n"
                 f"🚩 [ESC_ESTIMADOS]: {dados_reais['cantos_estimados']} por partida\n"
                 f"🥅 [PROBABILIDADE PÊNALTI]: {dados_reais['penalti_decisao']}\n"
                 f"🟥 [TENDÊNCIA CARTÃO VERMELHO]: {dados_reais['vermelho_decisao']}\n\n"
-                f"🔷 *APOSTA DE VALOR SUGERIDA:*\n"
+                f"🔷 APOSTA DE VALOR SUGERIDA:\n"
                 f"{dados_reais['conselho']}\n"
                 f"=========================================="
             )
-            bot.send_message(CHAT_ID, text=mensagem, parse_mode="Markdown")
+            bot.send_message(CHAT_ID, text=mensagem)
+            print(f"[Aniversario-App] Mensagem enviada com sucesso: {time_casa} x {time_fora}")
             time.sleep(1)
             
-        print("[Aniversario-App] Envio finalizado com sucesso!")
+        print("[Aniversario-App] Ciclo de postagens concluido de forma estável.")
     except Exception as e:
-        print(f"[ERRO TELEGRAM] Falha critica ao postar no canal: {e}")
+        print(f"[ERRO CRÍTICO TELEGRAM] Falha ao tentar postar mensagens: {e}")
 
 def loop_relogio_diario():
     print("[Aniversario-App] Sistema de contagem regressiva iniciado.")
+    # FORÇA UM ENVIO IMEDIATO ASSIM QUE O BOT LIGA PARA TESTARMOS
+    print("[Aniversario-App] Executando rotina automatica de inicializacao...")
+    gerar_e_enviar_sinais()
+    
     while True:
         try:
             agora_br = datetime.now(timezone.utc) - timedelta(hours=3)
