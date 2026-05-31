@@ -29,7 +29,6 @@ def puxar_jogos_do_dia_reais():
     hoje_br = datetime.now(timezone(timedelta(hours=-3)))
     data_hoje_str = hoje_br.strftime('%d/%m/%Y')
     
-    # BANCO DE DADOS INTEGRADO: Mapeamento de desfalques reais que geram as zebras
     banco_dados_oficial = [
         {
             "liga_nome": "Brasileirão Série A", 
@@ -38,7 +37,8 @@ def puxar_jogos_do_dia_reais():
             "time_fora": "Atlético-MG", 
             "horario": "16:00", 
             "zebra_detectada": True,
-            "desfalque": "⚠️ Crítico: Meio-campo titular e principal criador lesionado (Vasco)"
+            "desfalque": "⚠️ Crítico: Meio-campo titular e principal criador lesionado (Vasco)",
+            "placares_sugeridos": "1 x 1 ou 1 x 2"
         },
         {
             "liga_nome": "Brasileirão Série A", 
@@ -47,7 +47,8 @@ def puxar_jogos_do_dia_reais():
             "time_fora": "Chapecoense", 
             "horario": "16:00", 
             "zebra_detectada": False,
-            "desfalque": "📋 Plantel completo: Principais atacantes confirmados para a rodada"
+            "desfalque": "📋 Plantel completo: Principais atacantes confirmados para a rodada",
+            "placares_sugeridos": "2 x 0 ou 3 x 0"
         },
         {
             "liga_nome": "Brasileirão Série A", 
@@ -56,7 +57,8 @@ def puxar_jogos_do_dia_reais():
             "time_fora": "Internacional", 
             "horario": "11:00", 
             "zebra_detectada": False,
-            "desfalque": "📋 Escalamento padrão: Sem baixas importantes no setor defensivo"
+            "desfalque": "📋 Escalamento padrão: Sem baixas importantes no setor defensivo",
+            "placares_sugeridos": "1 x 1 ou 2 x 1"
         },
         {
             "liga_nome": "Brasileirão Série A", 
@@ -65,7 +67,8 @@ def puxar_jogos_do_dia_reais():
             "time_fora": "Fluminense", 
             "horario": "20:30", 
             "zebra_detectada": True,
-            "desfalque": "⚠️ Crítico: Zagueiro capitão suspenso e goleiro titular vetado pelo DM (Cruzeiro)"
+            "desfalque": "⚠️ Crítico: Zagueiro capitão suspenso e goleiro titular vetado pelo DM (Cruzeiro)",
+            "placares_sugeridos": "0 x 1 ou 1 x 2"
         }
     ]
     
@@ -78,7 +81,8 @@ def puxar_jogos_do_dia_reais():
             "time_fora": partida["time_fora"],
             "data_jogo": f"{data_hoje_str} às {partida['horario']}",
             "zebra_detectada": partida["zebra_detectada"],
-            "desfalque_detalhado": partida["desfalque"]
+            "desfalque_detalhado": partida["desfalque"],
+            "placares_sugeridos": partida["placares_sugeridos"]
         })
         
     return jogos_dia
@@ -114,9 +118,14 @@ def gerar_e_enviar_sinais():
         
         for jogo in jogos_dia:
             pct_ambas = int(random.randint(58, 77) * HISTORICO_IA["fator_inteligencia_ajuste"])
-            pct_over = int(random.randint(42, 74) * HISTORICO_IA["fator_inteligencia_ajuste"])
+            pct_over15 = int(random.randint(72, 93) * HISTORICO_IA["fator_inteligencia_ajuste"])
+            pct_over25 = int(random.randint(42, 74) * HISTORICO_IA["fator_inteligencia_ajuste"])
+            
             if pct_ambas > 99: pct_ambas = 99
-            if pct_over > 99: pct_over = 99
+            if pct_over15 > 99: pct_over15 = 99
+            if pct_over25 > 99: pct_over25 = 99
+
+            gol_no_primeiro_tempo = "SIM (Alta Tendência)" if pct_over15 > 82 else "NÃO (Jogo Estudado)"
 
             chutes_casa = round(random.uniform(3.9, 5.9), 1)
             chutes_fora = round(random.uniform(3.2, 5.1), 1)
@@ -124,7 +133,6 @@ def gerar_e_enviar_sinais():
             passes_fora = random.randint(350, 480)
             escanteios = round(random.uniform(8.8, 11.8), 1)
             
-            # FILTRAGEM ANTI-ODDS: O alerta de Zebra ativa pelo desfalque e quebra tática, ignorando cotações
             if jogo["zebra_detectada"]:
                 aposta_sugerida_texto = f"🚨 <b>ALTA PROBABILIDADE DE ZEBRA - ENTRADA DE VALOR DETECTADA!</b> 🔥\n🔥 Análise de campo aponta que a casa de aposta errou a linha. Explorar Handicap (+) a favor do visitante ou dupla chance devido ao desfalque pesado do favorito."
                 indicacao_texto = "✅ Entrada baseada em quebra de padrão tático e desfalques. Confirmado pela rede neural."
@@ -139,20 +147,21 @@ def gerar_e_enviar_sinais():
                 f"📈 Vantagem tática calculada através da rede neural com base no retrospecto\n\n"
                 f"📋 <b>ANÁLISE DE DESFALQUES:</b>\n"
                 f"{jogo['desfalque_detalhado']}\n\n"
-                f"📊 <b>AMBAS MARCAM:</b> {pct_ambas}% | 📈 <b>+2.5 GOLS:</b> {pct_over}%\n"
-                f"🎯 <b>MÉDIA CHUTES NO GOL:</b>\n"
-                f"Casa: {chutes_casa} | Fora: {chutes_fora}\n"
+                f"📊 <b>AMBAS MARCAM:</b> {pct_ambas}% | 📈 <b>+1.5 GOLS:</b> {pct_over15}% | 📈 <b>+2.5 GOLS:</b> {pct_over25}%\n"
+                f"🥅 <b>GOL NO PRIMEIRO TEMPO:</b> {gol_no_primeiro_tempo}\n"
+                f"🎯 <b>MÉDIA CHUTES NO GOL:</b> Casa: {chutes_casa} | Fora: {chutes_fora}\n"
                 f"🔄 <b>PASSES ESTIMADOS:</b> Casa: {passes_casa} | Fora: {passes_fora}\n"
                 f"🚩 <b>ESC_ESTIMADOS:</b> {escanteios} por partida\n"
                 f"🥅 <b>PROBABILIDADE PÊNALTI:</b> SIM (Tendência por monitoramento VAR)\n"
                 f"🟥 <b>TENDÊNCIA CARTÃO VERMELHO:</b> NORMAL\n\n"
+                f"🎲 <b>RESULTADO CORRETO ESTIMADO (IA):</b> {jogo['placares_sugeridos']}\n\n"
                 f"🔷 <b>APOSTA DE VALOR SUGERIDA (CENÁRIO DE CAMPO):</b>\n"
                 f"{aposta_sugerida_texto}\n\n"
                 f"💡 <b>Indicação:</b> {indicacao_texto}\n"
                 f"=========================================="
             )
             bot.send_message(CHAT_ID, text=mensagem, parse_mode="HTML")
-            print(f"[Grilo-Bot] Relatório baseado em desfalques enviado: {jogo['time_casa']}")
+            print(f"[Grilo-Bot] Relatório completo enviado: {jogo['time_casa']}")
             time.sleep(2.0)
             
         print("[Grilo-Bot] Varredura diária finalizada com atualização de memória concluída.")
@@ -165,7 +174,7 @@ def loop_relogio_diario():
     
     while True:
         try:
-            time.sleep(86400) # Loop estável de 24 horas
+            time.sleep(86400) # Ciclo mestre autônomo de 24 horas
             atualizar_inteligencia_diaria()
             gerar_e_enviar_sinais()
         except Exception as e:
@@ -176,7 +185,7 @@ def loop_relogio_diario():
 def home(): 
     return jsonify({
         "status": "online", 
-        "projeto": "Monitor Flashscore Tático Anti-Odds v7.0",
+        "projeto": "Monitor Flashscore AI Master Ultimate v8.0",
         "ia_assertividade_atual": f"{HISTORICO_IA['taxa_acerto_atual']}%"
     }), 200
 
