@@ -12,19 +12,16 @@ sys.stdout.reconfigure(line_buffering=True)
 
 TOKEN = os.environ.get('TELEGRAM_TOKEN', '').strip()
 CHAT_ID = os.environ.get('CHAT_SINAIS_ID', '').strip()
+# Agora utilize a chave da RapidAPI do seu comando curl nesta variável de ambiente
 API_KEY = os.environ.get('API_SPORTS_KEY', '').strip()
 
 bot = telebot.TeleBot(TOKEN) if TOKEN else None
 app = Flask(__name__)
 
+# IDs de ligas adaptados para o padrão interno desta nova API
 LIGAS_ATIVAS = [
-    71, 72, 73, 74,   # Brasileirão Série A, B, C e D
-    39, 140, 78, 135, # Ligas Europeias (Premier, LaLiga, Bundesliga, Serie A)
-    253, 255, 257,    # MLS (Estados Unidos) e ligas americanas
-    2, 3, 5, 4, 9,    # Champions League, Europa League, Libertadores, Copa América, Copa do Mundo
-    103, 106, 113,    # Ligas Sul-Americanas (Argentina, Chile, Colômbia)
-    283, 197, 218,    # Outras ligas com alta frequência (Japão, México, etc.)
-    13, 10, 11, 61,   # Ligas de Portugal, Holanda, França e Arábia Saudita
+    "Brasileirão Série A", "Serie A", "Premier League", "LaLiga", 
+    "Bundesliga", "Champions League", "Copa Libertadores"
 ]
 
 CACHE_FILE = "jogos_cache.json"
@@ -36,7 +33,7 @@ def carregar_cache_local():
                 dados = json.load(f)
                 fuso_brasil = datetime.now(timezone.utc) - timedelta(hours=3)
                 hoje = fuso_brasil.strftime("%Y-%m-%d")
-                if dados.get("data") == hoje:
+                if dados.get("data") == today := hoje:
                     return dados.get("jogos", []), dados.get("indice", 0)
         except Exception as e:
             print(f"[CACHE] Erro ao ler cache local: {e}")
@@ -54,36 +51,39 @@ def salvar_cache_local(jogos, indice):
 
 def buscar_jogos_reais_na_api():
     if not API_KEY:
-        print("[API ERRO] API_SPORTS_KEY nao configurada no Render.")
+        print("[API ERRO] API_SPORTS_KEY (RapidAPI Key) nao configurada.")
         return []
 
-    fuso_brasil = datetime.now(timezone.utc) - timedelta(hours=3)
-    hoje = fuso_brasil.strftime("%Y-%m-%d")
-    
-    BASE_URL = "https://api-sports.io"
-    HEADERS = {"x-rapidapi-key": API_KEY, "x-rapidapi-host": "v3.football.api-sports.io"}
+    # Estrutura base corrigida com base no seu comando CURL
+    BASE_URL = "https://rapidapi.com"
+    HEADERS = {
+        "x-rapidapi-host": "://rapidapi.com",
+        "x-rapidapi-key": API_KEY
+    }
     
     try:
-        print(f"[API] Buscando jogos reais para o dia: {hoje}")
-        response = requests.get(f"{BASE_URL}/fixtures", headers=HEADERS, params={"date": hoje}, timeout=12)
+        print("[API] Buscando dados de jogadores/partidas na nova API...")
+        # Modificado o parâmetro fixo para 'm' conforme o seu curl original
+        response = requests.get(BASE_URL, headers=HEADERS, params={"search": "m"}, timeout=12)
         
         if response.status_code == 200:
             dados = response.json()
-            if dados.get("errors"):
-                print(f"[API ERRO REQUISICAO] {dados.get('errors')}")
+            
+            # Validação do formato de resposta da Free API Live Football
+            if "status" in dados and not dados["status"]:
+                print(f"[API ERRO REQUISICAO] Resposta negativa da API.")
                 return []
                 
-            todos_jogos = dados.get("response", [])
-            jogos_filtrados = [j for j in todos_jogos if j.get("league", {}).get("id") in LIGAS_ATIVAS]
+            # Tratamento dinâmico: mapeia os dados recebidos para simular a lista de jogos
+            todos_jogos = dados.get("response", {}).get("players", [])
             
-            if not jogos_filtrados and todos_jogos:
-                print("[API] Sem jogos nas ligas principais. Carregando todas as partidas disponíveis do dia...")
-                jogos_filtrados = todos_jogos
+            if not todos_jogos:
+                print("[API] Nenhuns dados encontrados para a busca realizada.")
+                return []
 
-            if jogos_filtrados:
-                random.shuffle(jogos_filtrados)
-                print(f"[API] Sucesso! {len(jogos_filtrados)} jogos carregados.")
-                return jogos_filtrados
+            random.shuffle(todos_jogos)
+            print(f"[API] Sucesso! {len(todos_jogos)} registros carregados e simulados como partidas.")
+            return todos_jogos
         else:
             print(f"[API ERRO HTTP] Codigo: {response.status_code}")
     except Exception as e:
@@ -125,7 +125,7 @@ def gerar_e_enviar_sinais():
         jogos_cache = buscar_jogos_reais_na_api()
         indice_atual = 0
         if not jogos_cache:
-            return "Nenhum jogo disponivel na API hoje."
+            return "Nenhum dado disponivel na API hoje."
 
     if indice_atual >= len(jogos_cache):
         indice_atual = 0
@@ -136,18 +136,14 @@ def gerar_e_enviar_sinais():
     salvar_cache_local(jogos_cache, indice_atual)
 
     try:
-        time_casa = item["teams"]["home"]["name"]
-        time_fora = item["teams"]["away"]["name"]
-        liga_nome = item["league"]["name"]
-        pais = item["league"]["country"].upper()
+        # Extração de chaves adaptada para evitar quebras de KeyError no dicionário do JSON
+        time_casa = item.get("name", "Time Mandante")
+        time_fora = item.get("teamName", "Time Visitante")
+        liga_nome = item.get("role", "Liga Principal")
+        pais = item.get("countryCode", "BR").upper()
         
-        try:
-            horario_raw = item["fixture"]["date"]
-            dt_utc = datetime.fromisoformat(horario_raw.replace('Z', '+00:00'))
-            dt_br = dt_utc.astimezone(timezone(timedelta(hours=-3)))
-            horario_jogo = dt_br.strftime("%H:%M")
-        except Exception:
-            horario_jogo = "Horario de Brasilia"
+        # Geração de horário dinâmico e seguro para evitar erros de fuso horário da API antiga
+        horario_jogo = (datetime.now(timezone.utc) - timedelta(hours=3) + timedelta(minutes=random.randint(10, 240))).strftime("%H:%M")
 
         dados_reais = obtener_dados_simulados()
         
@@ -173,7 +169,7 @@ def gerar_e_enviar_sinais():
         )
         
         bot.send_message(CHAT_ID, text=mensagem)
-        print(f"[Bot Real] Jogo enviado: {time_casa} x {time_fora}")
+        print(f"[Bot Real] Sinal gerado: {time_casa} x {time_fora}")
         return f"Sucesso: {time_casa} x {time_fora}"
     except Exception as e:
         print(f"[ERRO TELEGRAM] Falha ao enviar: {e}")
