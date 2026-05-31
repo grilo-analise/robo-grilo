@@ -45,7 +45,7 @@ def salvar_cache_local(jogos, indice):
     try:
         fuso_brasil = datetime.now(timezone.utc) - timedelta(hours=3)
         hoje = fuso_brasil.strftime("%Y-%m-%d")
-        dados = {"data": hoje, "jogos": jogos, "indice": indice}
+        dados = {"data": today, "jogos": jogos, "indice": indice}
         with open(CACHE_FILE, "w", encoding="utf-8") as f:
             json.dump(dados, f, ensure_ascii=False, indent=4)
     except Exception as e:
@@ -233,4 +233,3 @@ def executar_cron():
     """
     return html_resposta
 
-if __name__ == '__main__':
