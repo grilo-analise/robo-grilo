@@ -16,13 +16,25 @@ TOKEN = os.environ.get('TELEGRAM_TOKEN')
 CHAT_ID = os.environ.get('CHAT_SINAIS_ID')
 API_KEY = os.environ.get('API_SPORTS_KEY')
 
+# DIAGNÓSTICO DE INICIALIZAÇÃO (Aparecerá nos logs do Render)
+print("=== VERIFICAÇÃO DE CREDENCIAIS ===")
+if not TOKEN:
+    print("[ERRO CRÍTICO] TELEGRAM_TOKEN não configurado no Render!")
+else:
+    print(f"[OK] TELEGRAM_TOKEN encontrado (Inicia com: {TOKEN[:5]}...)")
+
+if not CHAT_ID:
+    print("[ERRO CRÍTICO] CHAT_SINAIS_ID não configurado no Render!")
+else:
+    print(f"[OK] CHAT_SINAIS_ID configurado como: {CHAT_ID}")
+print("==================================")
+
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
 HEADERS = {"x-apisports-key": API_KEY}
 BASE_URL = "https://api-sports.io"
-
-LIGAS_ELITE = [71, 72, 39, 140, 78, 135]
+LIGAS_ELITE = 
 
 def obter_dados_simulados():
     p_casa = random.randint(40, 65)
@@ -51,33 +63,20 @@ def gerar_e_enviar_sinais():
     fuso_brasil = datetime.now(timezone.utc) - timedelta(hours=3)
     hoje = fuso_brasil.strftime("%Y-%m-%d")
     
-    url_jogos = f"{BASE_URL}/fixtures"
-    params = {"date": hoje}
-    jogos_elite = []
-    
-    try:
-        response = requests.get(url_jogos, headers=HEADERS, params=params, timeout=10)
-        if response.status_code == 200:
-            dados = response.json()
-            jogos = dados.get("response", [])
-            jogos_elite = [j for j in jogos if j.get("league", {}).get("id") in LIGAS_ELITE]
-    except Exception:
-        pass
-
-    # SE A API BLOQUEAR POR FALTA DE CRÉDITO, ENVIA ESTES JOGOS DE FORMA GARANTIDA
-    if not jogos_elite:
-        jogos_elite = [
-            {"teams": {"home": {"name": "Real Madrid"}, "away": {"name": "Barcelona"}}, "league": {"name": "La Liga", "country": "Spain"}},
-            {"teams": {"home": {"name": "Man City"}, "away": {"name": "Man United"}}, "league": {"name": "Premier League", "country": "England"}},
-            {"teams": {"home": {"name": "Palmeiras"}, "away": {"name": "Flamengo"}}, "league": {"name": "Brasileirão", "country": "Brazil"}},
-        ]
+    # Gerando os jogos de contingência direto para o teste
+    jogos_elite = [
+        {"teams": {"home": {"name": "Real Madrid"}, "away": {"name": "Barcelona"}}, "league": {"name": "La Liga", "country": "Spain"}},
+        {"teams": {"home": {"name": "Man City"}, "away": {"name": "Man United"}}, "league": {"name": "Premier League", "country": "England"}},
+        {"teams": {"home": {"name": "Palmeiras"}, "away": {"name": "Flamengo"}}, "league": {"name": "Brasileirão", "country": "Brazil"}},
+    ]
 
     try:
+        print("[Aniversario-App] Tentando enviar abertura para o Telegram...")
         abertura = f"📢 *BOLETIM DE ANÁLISE GRILO V1*\n📅 *DATA:* {fuso_brasil.strftime('%d/%m/%Y')}\n📊 Estruturando Painel Visual de Jogos Profissionais..."
         bot.send_message(CHAT_ID, text=abertura, parse_mode="Markdown")
-        time.sleep(2)
+        time.sleep(1)
         
-        for item in jogos_elite[:3]:
+        for item in jogos_elite:
             time_casa = item["teams"]["home"]["name"]
             time_fora = item["teams"]["away"]["name"]
             liga_nome = item["league"]["name"]
@@ -94,7 +93,7 @@ def gerar_e_enviar_sinais():
                 f"🏠 {time_casa}: `{dados_reais['ultimos_5_casa']}`\n"
                 f"🚀 {time_fora}: `{dados_reais['ultimos_5_fora']}`\n"
                 f"🔄 *HISTÓRICO DE DUELOS (H2H):* {dados_reais['h2h_historico']}\n\n"
-                f"📋 *DESFALQUES:* DM Limpo (Nenhum desfalque importante)\n"
+                f"📋 *DESFALQUES:* DM Limpo\n"
                 f"📊 [AMBAS MARCAM]: {dados_reais['ambas_marcam']} | 📈 [+2.5 GOLS]: {dados_reais['mais_25_gols']}\n"
                 f"🎯 [MÉDIA CHUTES NO GOL]: Casa: {dados_reais['chutes_casa']} | Fora: {dados_reais['chutes_fora']}\n"
                 f"🔄 [PASSES ESTIMADOS]: Casa: {dados_reais['passes_casa']} | Fora: {dados_reais['passes_fora']}\n"
@@ -105,10 +104,13 @@ def gerar_e_enviar_sinais():
                 f"{dados_reais['conselho']}\n"
                 f"=========================================="
             )
+            print(f"[Aniversario-App] Enviando jogo: {time_casa} x {time_fora}")
             bot.send_message(CHAT_ID, text=mensagem, parse_mode="Markdown")
-            time.sleep(3)
+            time.sleep(1)
+            
+        print("[Aniversario-App] Todos os sinais de teste enviados com sucesso!")
     except Exception as e:
-        print(f"[Aniversario-App] Erro crítico no envio do Telegram: {e}")
+        print(f"[ERRO TELEGRAM] Falha real no envio: {e}")
 
 def loop_relogio_diario():
     print("[Aniversario-App] Sistema de contagem regressiva iniciado com sucesso.")
@@ -126,15 +128,14 @@ def loop_relogio_diario():
 def home(): 
     return jsonify({
         "status": "online",
-        "projeto": "Gerenciador de Eventos e Festas de Aniversario v1.2",
-        "mensagem": "Sistema de checagem automatica de aniversariantes ativo.",
-        "versao_api": "1.0.4"
+        "projeto": "Gerenciador de Eventos e Festas de Aniversario v1.2"
     }), 200
 
 @app.route('/testar')
 def testar_agora():
+    print("[Aniversario-App] Rota /testar acessada manualmente pelo navegador!")
     Thread(target=gerar_e_enviar_sinais).start()
-    return "Disparando lembretes de aniversario para o Telegram em segundo plano...", 200
+    return "Processando testes em segundo plano... Olhe o painel de logs do Render!", 200
 
 if __name__ == '__main__':
     thread_relogio = Thread(target=loop_relogio_diario)
