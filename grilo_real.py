@@ -9,15 +9,15 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger("ProtocoloGrilo")
 
 # ==============================================================================
-# 🚀 SEGURANÇA MÁXIMA: LÊ DIRETO DO SEU PAINEL DO RENDER AUTOMATICAMENTE
+# 🚀 AJUSTADO: Lendo exatamente os mesmos nomes salvos no seu painel do Render
 # ==============================================================================
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
-CHAT_ID = os.environ.get("CHAT_ID")
+CHAT_ID = os.environ.get("CHAT_SINAIS_ID") # Mudado de CHAT_ID para CHAT_SINAIS_ID
 
 def enviar_mensagem_telegram(texto):
     """ Envia os palpites direto para o seu canal """
     if not TELEGRAM_TOKEN or not CHAT_ID:
-        logger.error("❌ ERRO CRÍTICO: TELEGRAM_TOKEN ou CHAT_ID não encontrados no Render!")
+        logger.error("❌ ERRO CRÍTICO: Variáveis não correspondidas no Render!")
         return
 
     url = f"https://telegram.org{TELEGRAM_TOKEN}/sendMessage"
@@ -36,7 +36,7 @@ def executar_analise_da_rodada():
     logger.info("🤖 [ML] Iniciando varredura tática da rodada de futebol...")
     
     mensagem_tactica = (
-        "🤖 *PRODUTO GRILO V1 - ANÁLISE TÁTICA DA ROADA*\n"
+        "🤖 *PRODUTO GRILO V1 - ANÁLISE TÁTICA DA RODADA*\n"
         "📅 _Jogos Reais: 31 de Maio de 2026_\n"
         "-----------------------------------------\n\n"
         "⚽ *Bragantino vs Internacional* (11h00)\n"
@@ -46,7 +46,7 @@ def executar_analise_da_rodada():
         "⚽ *Palmeiras vs Chapecoense* (16h00)\n"
         "🎯 *Palpite do Robô:* Vitória do Palmeiras HT\n\n"
         "-----------------------------------------\n"
-        "⚙️ _Módulo ML: Inicialização via Variáveis do Render Pronta_"
+        "⚙️ _Módulo ML: Integração de Ambiente Concluída!_"
     )
     enviar_mensagem_telegram(mensagem_tactica)
 
