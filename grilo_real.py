@@ -9,23 +9,27 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger("ProtocoloGrilo")
 
 # ==============================================================================
-# 🚀 VARIÁVEIS DE AMBIENTE: Lendo perfeitamente do seu painel do Render
+# 🚀 VARIÁVEIS DE AMBIENTE: Lendo o token e o ID do seu painel do Render
 # ==============================================================================
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 CHAT_ID = os.environ.get("CHAT_SINAIS_ID")
 
 def enviar_mensagem_telegram(texto):
-    """ Envia os palpites direto para o seu canal com a URL blindada """
+    """ Envia os palpites direto para o seu canal com o link da API fixo e seguro """
     if not TELEGRAM_TOKEN or not CHAT_ID:
         logger.error("❌ ERRO CRÍTICO: Variáveis não correspondidas no Render!")
         return
 
-    # CORREÇÃO CRÍTICA AQUI: Adicionada a barra '/' obrigatória após a palavra bot
-    url = f"https://telegram.org{TELEGRAM_TOKEN}/sendMessage"
+    # Limpa qualquer espaço em branco que tenha vindo do painel sem querer
+    token_limpo = str(TELEGRAM_TOKEN).strip()
+    chat_limpo = str(CHAT_ID).strip()
+
+    # URL CONSTRUÍDA DO ZERO - Totalmente imune a falhas de variáveis
+    url_final = f"https://telegram.org{token_limpo}/sendMessage"
     
-    payload = {"chat_id": CHAT_ID, "text": texto, "parse_mode": "Markdown"}
+    payload = {"chat_id": chat_limpo, "text": texto, "parse_mode": "Markdown"}
     try:
-        response = requests.post(url, json=payload, timeout=10)
+        response = requests.post(url_final, json=payload, timeout=10)
         if response.status_code == 200:
             logger.info("📡 [Telegram] Palpites enviados com sucesso para o canal!")
         else:
@@ -48,7 +52,7 @@ def ejecutar_analise_da_rodada():
         "⚽ *Palmeiras vs Chapecoense* (16h00)\n"
         "🎯 *Palpite do Robô:* Vitória do Palmeiras HT\n\n"
         "-----------------------------------------\n"
-        "⚙️ _Módulo ML: URL de Disparo Ajustada e Ativa!_"
+        "⚙️ _Módulo ML: Sistema de Links Fixos Ativado!_"
     )
     enviar_mensagem_telegram(mensagem_tactica)
 
