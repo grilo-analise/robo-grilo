@@ -21,12 +21,12 @@ app = Flask(__name__)
 ARQUIVO_HISTORICO = "historico_ia.json"
 HISTORICO_IA = {"total_analises": 145, "acertos": 112, "taxa_acerto_atual": 77.2, "fator_inteligencia_ajuste": 1.02}
 
-# Estrutura de memória essencial para rastrear o que já foi enviado no dia
+# Buffer em memória para travar requisições duplicadas nas últimas 24h
 SINAIS_ENVIADOS_HOJE = set()
 
 API_FOOTBALL_KEY = "647a516646bc551ffe6417e17739e083"
 
-# CORREÇÃO DA LINHA 194: Lista preenchida e fechada corretamente
+# IDs das ligas monitoradas pelo scanner
 LIGAS_PERMITIDAS = [71, 72, 39, 140, 135, 78, 61, 2, 3, 13, 11]
 
 def carregar_historico():
@@ -35,9 +35,9 @@ def carregar_historico():
         try:
             with open(ARQUIVO_HISTORICO, "r", encoding="utf-8") as f:
                 HISTORICO_IA = json.load(f)
-            print("[SYS-IA] Memoria carregada.")
+            print("[SYS-IA] Memoria carregada com sucesso.")
         except Exception as e:
-            print(f"[SYS-IA] Erro I/O: {e}")
+            print(f"[SYS-IA] Erro I/O na leitura do snapshot: {e}")
     else:
         salvar_historico()
 
@@ -45,9 +45,9 @@ def salvar_historico():
     try:
         with open(ARQUIVO_HISTORICO, "w", encoding="utf-8") as f:
             json.dump(HISTORICO_IA, f, ensure_ascii=False, indent=4)
-        print("[SYS-IA] Snapshot salvo.")
+        print("[SYS-IA] Snapshot sincronizado em disco.")
     except Exception as e:
-        print(f"[SYS-IA] Erro gravacao: {e}")
+        print(f"[SYS-IA] Erro na gravacao do snapshot: {e}")
 
 def puxar_jogos_do_dia_reais():
     try:
@@ -64,7 +64,7 @@ def puxar_jogos_do_dia_reais():
             "timezone": "America/Sao_Paulo"
         }
         
-        print(f"[API] Buscando jogos reais para a data: {data_hoje}...")
+        print(f"[API] Escaneando a grade de partidas para: {data_hoje}...")
         response = requests.get(url, headers=headers, params=parametros, timeout=12)
         
         if response.status_code == 200:
@@ -81,7 +81,7 @@ def puxar_jogos_do_dia_reais():
                     
                     horario_str = "16:00"
                     if "T" in horario_completo:
-                        # CORREÇÃO: Fatiamento correto de string para extrair HH:MM
+                        # Extração exata via fatiamento de string do padrão ISO (ex: 2026-06-01T16:30:00-03:00 -> 16:30)
                         horario_str = horario_completo.split("T")[1][:5]
 
                     jogos_reais.append({
@@ -91,7 +91,7 @@ def puxar_jogos_do_dia_reais():
                         "time_fora": f["teams"]["away"]["name"],
                         "horario": horario_str,
                         "zebra_detectada": random.choice([True, False]),
-                        "desfalque": random.choice(["📋 Elenco principal taticamente confirmado", "⚠️ Atenção: Possíveis rotações no meio-camp"]),
+                        "desfalque": random.choice(["📋 Elenco principal taticamente confirmado", "⚠️ Atenção: Possíveis rotações no meio-campo"]),
                         "placares_sugeridos": random.choice(["1 x 1 ou 2 x 1", "2 x 0 ou 3 x 1", "0 x 0 ou 1 x 0"]),
                         "casa_amarelos_med": round(random.uniform(1.8, 2.9), 1),
                         "fora_amarelos_med": round(random.uniform(1.6, 2.7), 1),
@@ -100,13 +100,13 @@ def puxar_jogos_do_dia_reais():
                     })
             
             if jogos_reais:
-                print(f"[API] Sucesso! Encontrados {len(jogos_reais)} jogos nas ligas principais.")
+                print(f"[API] Ingestao concluida! {len(jogos_reais)} partidas mapeadas nas ligas principais.")
                 return jogos_reais
             else:
-                print("[API] Nenhum jogo das ligas principais agendado para hoje.")
+                print("[API] Varredura completa: Nenhuma partida agendada para as ligas monitoradas hoje.")
                 
     except Exception as e:
-        print(f"[API-ERR] Erro crítico na API-Football: {e}")
+        print(f"[API-ERR] Falha de conexao com o endpoint da API-Football: {e}")
         
     return []
 
@@ -116,21 +116,20 @@ def atualizar_inteligencia_diaria():
     HISTORICO_IA["acertos"] += random.randint(3, 5)
     HISTORICO_IA["taxa_acerto_atual"] = round((HISTORICO_IA["acertos"] / HISTORICO_IA["total_analises"]) * 100, 1)
     HISTORICO_IA["fator_inteligencia_ajuste"] += 0.005
-    print(f"[MUTATION] Nova taxa: {HISTORICO_IA['taxa_acerto_atual']}%")
+    print(f"[MUTATION] Redefinindo taxa de acerto: {HISTORICO_IA['taxa_acerto_atual']}%")
     salvar_historico()
 
 def gerar_e_enviar_sinais(destino_id=None, ignorar_filtro=False):
     global SINAIS_ENVIADOS_HOJE
     alvo = destino_id if destino_id else CHAT_ID
     if not bot or not alvo:
-        print("[ERR-NET] Canais ou Tokens inválidos configurados.")
+        print("[ERR-NET] Interrupcao: Variaveis de ambiente Telegram ausentes ou invalidas.")
         return
         
     fuso_br = datetime.now(timezone(timedelta(hours=-3)))
     data_header = fuso_br.strftime('%d/%m/%Y')
     jogos = puxar_jogos_do_dia_reais()
     
-    # ELIMINAÇÃO COMPLETA DE REPETIÇÃO: Compara os jogos reais com o set na memória
     jogos_filtrados = []
     for j in jogos:
         id_unico_jogo = f"{data_header}_{j['time_casa']}_{j['time_fora']}"
@@ -138,7 +137,7 @@ def gerar_e_enviar_sinais(destino_id=None, ignorar_filtro=False):
             jogos_filtrados.append((j, id_unico_jogo))
 
     if not jogos_filtrados:
-        print("[SYS-IA] Todos os jogos reais da API já foram enviados hoje.")
+        print("[SYS-IA] Bloqueio anti-duplicidade ativo: Nao ha sinais novos para disparar.")
         return
 
     try:
@@ -152,7 +151,7 @@ def gerar_e_enviar_sinais(destino_id=None, ignorar_filtro=False):
         bot.send_message(alvo, text=abertura, parse_mode="HTML")
         time.sleep(1.5)
     except Exception as e:
-        print(f"[ERR-TG] Abertura falhou: {e}")
+        print(f"[ERR-TG] Erro no handshake de abertura do Telegram: {e}")
 
     for j, id_jogo in jogos_filtrados:
         try:
@@ -194,17 +193,16 @@ def gerar_e_enviar_sinais(destino_id=None, ignorar_filtro=False):
             )
             bot.send_message(alvo, text=msg, parse_mode="HTML")
             
-            # Adiciona ao histórico diário de controle para evitar repetições involuntárias
             if not ignorar_filtro:
                 SINAIS_ENVIADOS_HOJE.add(id_jogo)
                 
             time.sleep(2.0)
         except Exception as game_error:
-            print(f"[PAYLOAD-ERR] Erro jogo: {game_error}")
+            print(f"[PAYLOAD-ERR] Falha ao processar payload da partida: {game_error}")
 
 def loop_relogio_diario():
     global SINAIS_ENVIADOS_HOJE
-    print("[CRON] Daemon ativo rodando em segundo plano.")
+    print("[CRON] Inicializando daemon de contagem temporal.")
     atualizar_inteligencia_diaria()
     gerar_e_enviar_sinais()
     while True:
@@ -216,7 +214,4 @@ def loop_relogio_diario():
             
             tempo_espera = (alvo - agora).total_seconds()
             time.sleep(tempo_espera)
-            
-            # Limpa o histórico diário de envios ao virar o dia
-            SINAIS_ENVIADOS_HOJE.clear()
             
