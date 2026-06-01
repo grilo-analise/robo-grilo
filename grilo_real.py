@@ -5,7 +5,7 @@ import json
 import telebot
 import time
 import random
-import requests  # Injeção para varredura de dados dinâmicos na rede externa
+import requests
 from threading import Thread
 from datetime import datetime, timedelta, timezone
 from flask import Flask, jsonify
@@ -54,7 +54,7 @@ def puxar_jogos_do_dia_reais():
     url_cartola = "https://globo.com"
     
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
     }
     
     try:
@@ -67,11 +67,11 @@ def puxar_jogos_do_dia_reais():
             partidas = dados.get("partidas", [])
             
             for p in partidas:
-                data_jogo_raw = p.get("partida_data")  # Esperado: "2026-06-01 16:00:00"
+                data_jogo_raw = p.get("partida_data")
                 if not data_jogo_raw or " " not in data_jogo_raw:
                     continue
                     
-                # Hacker Fix: Extrai a string pura 'AAAA-MM-DD' antes do espaço
+                # Extrai apenas a string da data antes do espaço
                 data_jogo_YYYY_MM_DD = data_jogo_raw.split(" ")[0]
                 
                 if data_jogo_YYYY_MM_DD == data_hoje_str:
@@ -81,9 +81,9 @@ def puxar_jogos_do_dia_reais():
                     nome_casa = clubes.get(id_casa, {}).get("nome", "Time Casa")
                     nome_fora = clubes.get(id_fora, {}).get("nome", "Time Visitante")
                     
-                    # Hacker Fix: Extrai exatamente o HH:MM tirando os segundos
+                    # Filtra o horário retirando os segundos
                     horario_cru = data_jogo_raw.split(" ")[1]
-                    horario_str = horario_cru[:5]
+                    horario_str = ":".join(horario_cru.split(" ")[:2]) if ":" in horario_cru else "00:00"
                     
                     zebra = random.choice([True, False])
                     desfalque = "⚠️ Crítico: Desfalques táticos importantes na equipe" if zebra else "📋 Plantel completo para a rodada"
@@ -211,3 +211,7 @@ def loop_relogio_diario():
             agora = datetime.now(fuso_br)
             amanha = agora + timedelta(days=1)
             alvo = datetime(amanha.year, amanha.month, amanha.day, 0, 0, 0, tzinfo=fuso_br)
+            time.sleep((alvo - agora).total_seconds())
+            atualizar_inteligencia_diaria()
+            gerar_e_enviar_sinais()
+            time.sleep(10)
