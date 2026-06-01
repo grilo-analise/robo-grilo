@@ -15,7 +15,7 @@ sys.stdout.reconfigure(line_buffering=True)
 # Configurações de Ambiente (Render)
 TOKEN = os.environ.get('TELEGRAM_TOKEN', '').strip()
 CHAT_ID = os.environ.get('CHAT_SINAIS_ID', '').strip()
-RAPIDAPI_KEY = os.environ.get('RAPIDAPI_KEY', '').strip()  # Chave da API de Futebol
+RAPIDAPI_KEY = os.environ.get('RAPIDAPI_KEY', '').strip()
 
 bot = telebot.TeleBot(TOKEN) if TOKEN else None
 app = Flask(__name__)
@@ -53,9 +53,8 @@ def puxar_jogos_do_dia_reais():
     jogos_capturados = []
     fuso_br = timezone(timedelta(hours=-3))
     hoje_br = datetime.now(fuso_br)
-    data_api = hoje_br.strftime('%Y-%m-%d')  # Formato aceito pela API: AAAA-MM-DD
+    data_api = hoje_br.strftime('%Y-%m-%d')
 
-    # Endpoint global para capturar os confrontos agendados para a data de hoje
     url = "https://rapidapi.com"
     querystring = {"date": data_api}
     
@@ -68,7 +67,7 @@ def puxar_jogos_do_dia_reais():
         resposta = requests.get(url, headers=headers, params=querystring, timeout=15)
         
         if resposta.status_code != 200:
-            print(f"[ALERTA-API] Falha de conexao com o servidor global. Status: {resposta.status_code}")
+            print(f"[ALERTA-API] Falha de conexao. Status: {resposta.status_code}")
             return []
 
         dados = resposta.json()
@@ -78,7 +77,6 @@ def puxar_jogos_do_dia_reais():
             print("[SISTEMA-AVISO] Nenhuma partida encontrada na grade global para hoje.")
             return []
 
-        # Embaralha os jogos do dia para trazer ligas variadas a cada ciclo
         random.shuffle(partidas)
 
         for item in partidas:
@@ -87,14 +85,12 @@ def puxar_jogos_do_dia_reais():
                 league = item.get("league", {})
                 teams = item.get("teams", {})
 
-                # Converte o timestamp UTC do jogo para o Horário de Brasília
                 ts = fixture.get("timestamp")
                 horario_jogo = "16:00"
                 if ts:
                     dt = datetime.fromtimestamp(int(ts), tz=fuso_br)
                     horario_jogo = dt.strftime("%H:%M")
 
-                # Estrutura os dados reais recebidos da API mundial
                 jogo = {
                     "liga_nome": league.get("name", "Liga Internacional"),
                     "pais": league.get("country", "MUNDO").upper(),
@@ -111,18 +107,17 @@ def puxar_jogos_do_dia_reais():
                 }
                 jogos_capturados.append(jogo)
 
-                # Limita o envio a 6 jogos reais da grade para evitar spam no Telegram
                 if len(jogos_capturados) >= 6:
                     break
             except Exception as e_item:
-                print(f"[SISTEMA-PROCESSO] Erro ao filtrar jogo da grade: {e_item}")
+                print(f"[SISTEMA-PROCESSO] Erro ao filtrar jogo: {e_item}")
                 continue
 
-        print(f"[SISTEMA] Sucesso! {len(jogos_capturados)} partidas REAIS importadas do Hub Global.")
+        print(f"[SISTEMA] Sucesso! {len(jogos_capturados)} partidas REAIS importadas.")
         return jogos_capturados
 
     except Exception as e:
-        print(f"[SISTEMA-ERRO] Falha critica ao acessar a API de Futebol: {e}")
+        print(f"[SISTEMA-ERRO] Falha critica ao acessar a API: {e}")
         return []
 
 def atualizar_inteligencia_diaria():
@@ -229,7 +224,7 @@ def loop_relogio_diario():
             
             tempo_espera = (alvo - agora).total_seconds()
             if tempo_espera > 0:
-                print(f"[CRON] Aguardando {round(tempo_espera/3600, 2)} horas para sincronizar com a nova lista do Hub...")
+                print(f"[CRON] Aguardando {round(tempo_espera/3600, 2)} horas para o Hub...")
                 time.sleep(tempo_espera)
                 
             atualizar_inteligencia_diaria()
@@ -245,3 +240,23 @@ def escutar_comandos_telegram():
     @bot.message_handler(commands=['hoje', 'sinais'])
     def demand_reply(message):
         bot.reply_to(message, "⏳ <i>Buscando partidas reais no servidor internacional...</i>", parse_mode="HTML")
+        gerar_e_enviar_sinais(destino_id=message.chat.id)
+    while True:
+        try:
+            bot.infinity_polling(timeout=20, long_polling_timeout=10)
+        except Exception as e:
+            print(f"[TELEGRAM-POLLING-ERR] Erro no polling: {e}")
+            time.sleep(10)
+
+@app.route('/')
+def home():
+    return jsonify({"status": "payload_delivered", "service": "Grilo Core AI"}), 200
+
+if __name__ == '__main__':
+    carregar_historico()
+    
+    t1 = Thread(target=loop_relogio_diario)
+    t1.daemon = True
+    t1.start()
+    
+    if bot:
