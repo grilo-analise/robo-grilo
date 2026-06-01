@@ -71,8 +71,9 @@ def puxar_jogos_do_dia_reais():
                 if not data_jogo_raw or " " not in data_jogo_raw:
                     continue
                     
-                # Extrai apenas a string da data antes do espaço
-                data_jogo_YYYY_MM_DD = data_jogo_raw.split(" ")[0]
+                # Separa data e hora com segurança
+                partes_data = data_jogo_raw.split(" ")
+                data_jogo_YYYY_MM_DD = partes_data[0]
                 
                 if data_jogo_YYYY_MM_DD == data_hoje_str:
                     id_casa = str(p.get("clube_casa_id"))
@@ -81,9 +82,9 @@ def puxar_jogos_do_dia_reais():
                     nome_casa = clubes.get(id_casa, {}).get("nome", "Time Casa")
                     nome_fora = clubes.get(id_fora, {}).get("nome", "Time Visitante")
                     
-                    # Filtra o horário retirando os segundos
-                    horario_cru = data_jogo_raw.split(" ")[1]
-                    horario_str = ":".join(horario_cru.split(" ")[:2]) if ":" in horario_cru else "00:00"
+                    # Extrai o horário (HH:MM) a partir da string de forma segura
+                    horario_cru = partes_data[1]
+                    horario_str = horario_cru[:5] if ":" in horario_cru else "00:00"
                     
                     zebra = random.choice([True, False])
                     desfalque = "⚠️ Crítico: Desfalques táticos importantes na equipe" if zebra else "📋 Plantel completo para a rodada"
@@ -214,4 +215,3 @@ def loop_relogio_diario():
             time.sleep((alvo - agora).total_seconds())
             atualizar_inteligencia_diaria()
             gerar_e_enviar_sinais()
-            time.sleep(10)
