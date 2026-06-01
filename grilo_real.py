@@ -48,7 +48,6 @@ def puxar_jogos_do_dia_reais():
     hoje_br = datetime.now(timezone(timedelta(hours=-3)))
     data_str = hoje_br.strftime('%Y-%m-%d')
     
-    # Lista de backup caso a API atinja o limite ou falhe
     backup_jogos = [
         {"liga_nome": "Brasileirão Série A", "pais": "BRASIL", "time_casa": "Vasco da Gama", "time_fora": "Atlético-MG", "horario": "16:00", "zebra_detectada": True, "desfalque": "⚠️ Crítico: Meio-campo titular lesionado", "placares_sugeridos": "1 x 1 ou 1 x 2", "casa_amarelos_med": 2.8, "fora_amarelos_med": 1.9, "casa_jogadores_pendurados": 4, "fora_jogadores_pendurados": 2}
     ]
@@ -197,12 +196,14 @@ def loop_relogio_diario():
             fuso_br = timezone(timedelta(hours=-3))
             agora = datetime.now(fuso_br)
             
-            # Alvo configurado para disparar as 07:00 da manha
             alvo = agora.replace(hour=7, minute=0, second=0, microsecond=0)
             if agora >= alvo:
                 alvo += timedelta(days=1)
             
             segundos_espera = (alvo - agora).total_seconds()
-            print(f"[CRON] Aguardando {segundos_espera:.2f} segundos ate o proximo disparo agendado (07:00).")
+            print(f"[CRON] Aguardando {segundos_espera:.2f} segundos ate o proximo disparo (07:00).")
             
             time.sleep(segundos_espera)
+            atualizar_inteligencia_diaria()
+            gerar_e_enviar_sinais()
+        except Exception as e:
