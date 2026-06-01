@@ -21,23 +21,9 @@ app = Flask(__name__)
 ARQUIVO_HISTORICO = "historico_ia.json"
 HISTORICO_IA = {"total_analises": 145, "acertos": 112, "taxa_acerto_atual": 77.2, "fator_inteligencia_ajuste": 1.02}
 
-# Chave oficial fornecida por você
 API_FOOTBALL_KEY = "647a516646bc551ffe6417e17739e083"
 
-# IDs das ligas mais populares para filtrar (Evita jogos de ligas irrelevantes)
-LIGAS_PERMITIDAS = [
-    71,  # Brasileirão Série A
-    72,  # Brasileirão Série B
-    39,  # Premier League (Inglaterra)
-    140, # La Liga (Espanha)
-    135, # Serie A (Itália)
-    78,  # Bundesliga (Alemanha)
-    61,  # Ligue 1 (França)
-    2,   # UEFA Champions League
-    3,   # UEFA Europa League
-    13,  # Copa Libertadores
-    11,  # Copa Sul-Americana
-]
+LIGAS_PERMITIDAS = [71, 72, 39, 140, 135, 78, 61, 2, 3, 13, 11]
 
 def carregar_historico():
     global HISTORICO_IA
@@ -60,7 +46,6 @@ def salvar_historico():
         print(f"[SYS-IA] Erro gravacao: {e}")
 
 def puxar_jogos_do_dia_reais():
-    """Busca partidas reais do dia diretamente da API-Football usando a sua chave."""
     try:
         fuso_br = datetime.now(timezone(timedelta(hours=-3)))
         data_hoje = fuso_br.strftime('%Y-%m-%d')
@@ -86,14 +71,13 @@ def puxar_jogos_do_dia_reais():
             for f in fixtures:
                 liga_id = f.get("league", {}).get("id")
                 
-                # Filtra apenas pelas ligas importantes definidas na lista acima
                 if liga_id in LIGAS_PERMITIDAS:
                     fixture_info = f.get("fixture", {})
                     horario_completo = fixture_info.get("date", "")
                     
-                    # Formata o horário (Ex: 2026-06-01T16:00:00-03:00 -> 16:00)
                     horario_str = "16:00"
                     if "T" in horario_completo:
+                        # Extrai corretamente HH:MM do padrão ISO (ex: 2026-06-01T16:00:00-03:00)
                         horario_str = horario_completo.split("T")[1][:5]
 
                     jogos_reais.append({
@@ -120,7 +104,6 @@ def puxar_jogos_do_dia_reais():
     except Exception as e:
         print(f"[API-ERR] Erro crítico na API-Football: {e}")
         
-    # Se a API falhar ou não tiver jogos nas ligas principais, retorna vazio para não enviar lixo
     return []
 
 def atualizar_inteligencia_diaria():
@@ -198,7 +181,7 @@ def gerar_e_enviar_sinais(destino_id=None):
                 f"=========================================="
             )
             bot.send_message(alvo, text=msg, parse_mode="HTML")
-            time.sleep(2.0) # Delay seguro anti-flood do Telegram
+            time.sleep(2.0)
         except Exception as game_error:
             print(f"[PAYLOAD-ERR] Erro jogo: {game_error}")
 
@@ -211,7 +194,7 @@ def loop_relogio_diario():
             fuso_br = timezone(timedelta(hours=-3))
             agora = datetime.now(fuso_br)
             amanha = agora + timedelta(days=1)
-            alvo = datetime(amanha.year, amanha.month, amanha.day, 0, 5, 0, tzinfo=fuso_br) # Roda às 00:05 para dar tempo da API atualizar
+            alvo = datetime(amanha.year, amanha.month, amanha.day, 0, 5, 0, tzinfo=fuso_br)
             
             tempo_espera = (alvo - agora).total_seconds()
             time.sleep(tempo_espera)
@@ -220,3 +203,26 @@ def loop_relogio_diario():
             gerar_e_enviar_sinais()
             time.sleep(15)
         except Exception as e:
+            print(f"[CRON-ERR] Loop de tempo reiniciado: {e}")
+            time.sleep(30)
+
+def escutar_comandos_telegram():
+    if not bot:
+        return
+    @bot.message_handler(commands=['hoje', 'sinais'])
+    def demand_reply(message):
+        bot.reply_to(message, "⏳ <i>Conectando à API-Football e extraindo partidas reais de hoje...</i>", parse_mode="HTML")
+        gerar_e_enviar_sinais(destino_id=message.chat.id)
+    while True:
+        try:
+            bot.infinity_polling(timeout=20, long_polling_timeout=10)
+        except Exception:
+            time.sleep(10)
+
+@app.route('/')
+def home():
+    return jsonify({"status": "api_connected", "service": "Grilo Core Football AI"}), 200
+
+if __name__ == '__main__':
+    carregar_historico()
+    t1 = Thread(target=loop_relogio_diario)
