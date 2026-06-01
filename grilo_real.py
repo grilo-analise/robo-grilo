@@ -219,4 +219,3 @@ def escutar_comandos_telegram():
             bot.infinity_polling(timeout=20, long_polling_timeout=10)
         except Exception:
             time.sleep(10)
-
