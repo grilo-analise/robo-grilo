@@ -3,22 +3,19 @@ import sys
 import json
 import time
 import random
-from threading import Thread
 from datetime import datetime, timedelta, timezone
 import requests
 import telebot
-from flask import Flask, jsonify
 
-# Força o Python a descarregar os prints imediatamente no log do Render
+# Garante a exibição imediata dos logs no painel do servidor
 sys.stdout.reconfigure(line_buffering=True)
 
-# Configurações de Ambiente (Render)
+# Configurações de Ambiente
 TOKEN = os.environ.get('TELEGRAM_TOKEN', '').strip()
 CHAT_ID = os.environ.get('CHAT_SINAIS_ID', '').strip()
 RAPIDAPI_KEY = os.environ.get('RAPIDAPI_KEY', '').strip()
 
 bot = telebot.TeleBot(TOKEN) if TOKEN else None
-app = Flask(__name__)
 
 ARQUIVO_HISTORICO = "historico_ia.json"
 HISTORICO_IA = {"total_analises": 145, "acertos": 112, "taxa_acerto_atual": 77.2, "fator_inteligencia_ajuste": 1.02}
@@ -29,9 +26,9 @@ def carregar_historico():
         try:
             with open(ARQUIVO_HISTORICO, "r", encoding="utf-8") as f:
                 HISTORICO_IA = json.load(f)
-            print("[SYS-IA] Memoria carregada.")
+            print("[SYS-IA] Memoria carregada com sucesso.")
         except Exception as e:
-            print(f"[SYS-IA] Erro I/O: {e}")
+            print(f"[SYS-IA] Erro ao carregar arquivo: {e}")
     else:
         salvar_historico()
 
@@ -39,15 +36,14 @@ def salvar_historico():
     try:
         with open(ARQUIVO_HISTORICO, "w", encoding="utf-8") as f:
             json.dump(HISTORICO_IA, f, ensure_ascii=False, indent=4)
-        print("[SYS-IA] Snapshot salvo.")
+        print("[SYS-IA] Snapshot historico salvo.")
     except Exception as e:
-        print(f"[SYS-IA] Erro gravacao: {e}")
+        print(f"[SYS-IA] Erro ao gravar historico: {e}")
 
 def puxar_jogos_do_dia_reais():
     print("[SISTEMA] Conectando ao hub global de dados esportivos...")
-    
     if not RAPIDAPI_KEY:
-        print("[AVISO] RAPIDAPI_KEY nao configurada. Retornando lista vazia.")
+        print("[AVISO] RAPIDAPI_KEY nao configurada.")
         return []
 
     jogos_capturados = []
@@ -57,7 +53,6 @@ def puxar_jogos_do_dia_reais():
 
     url = "https://rapidapi.com"
     querystring = {"date": data_api}
-    
     headers = {
         "X-RapidAPI-Key": RAPIDAPI_KEY,
         "X-RapidAPI-Host": "://rapidapi.com"
@@ -65,16 +60,14 @@ def puxar_jogos_do_dia_reais():
 
     try:
         resposta = requests.get(url, headers=headers, params=querystring, timeout=15)
-        
         if resposta.status_code != 200:
             print(f"[ALERTA-API] Falha de conexao. Status: {resposta.status_code}")
             return []
 
         dados = resposta.json()
         partidas = dados.get("response", [])
-
         if not partidas:
-            print("[SISTEMA-AVISO] Nenhuma partida encontrada na grade global para hoje.")
+            print("[SISTEMA-AVISO] Nenhuma partida encontrada para hoje.")
             return []
 
         random.shuffle(partidas)
@@ -115,9 +108,8 @@ def puxar_jogos_do_dia_reais():
 
         print(f"[SISTEMA] Sucesso! {len(jogos_capturados)} partidas REAIS importadas.")
         return jogos_capturados
-
     except Exception as e:
-        print(f"[SISTEMA-ERRO] Falha critica ao acessar a API: {e}")
+        print(f"[SISTEMA-ERRO] Falha critica na API: {e}")
         return []
 
 def atualizar_inteligencia_diaria():
@@ -132,16 +124,15 @@ def atualizar_inteligencia_diaria():
 def gerar_e_enviar_sinais(destino_id=None):
     alvo = destino_id if destino_id else CHAT_ID
     if not bot or not alvo:
-        print("[ERR-NET] Socket nulo ou sem ID de destino configurado.")
+        print("[ERR-NET] Bot ou ID de destino nao configurado.")
         return
         
     fuso_br = datetime.now(timezone(timedelta(hours=-3)))
     data_header = fuso_br.strftime('%d/%m/%Y')
-    
     jogos = puxar_jogos_do_dia_reais()
     
     if not jogos:
-        print("[SISTEMA-AVISO] O hub retornou 0 jogos reais. Envio cancelado.")
+        print("[SISTEMA-AVISO] Sem jogos reais para enviar.")
         return
 
     try:
@@ -211,7 +202,7 @@ def gerar_e_enviar_sinais(destino_id=None):
             print(f"[PAYLOAD-ERR] Erro jogo: {game_error}")
 
 def loop_relogio_diario():
-    print("[CRON] Daemon ativo sincronizado com a virada de dia do fuso de Brasilia.")
+    print("[CRON] Monitor de horarios iniciado e ativo.")
     atualizar_inteligencia_diaria()
     gerar_e_enviar_sinais()
     
@@ -220,44 +211,39 @@ def loop_relogio_diario():
             fuso_br = timezone(timedelta(hours=-3))
             agora = datetime.now(fuso_br)
             amanha = agora + timedelta(days=1)
-            alvo = datetime(amanha.year, amanha.month, amanha.day, 1, 0, 0, tzinfo=fuso_br)
+            alvo = datetime(amanha.year, amanham.month, amanha.day, 1, 0, 0, tzinfo=fuso_br)
             
             tempo_espera = (alvo - agora).total_seconds()
             if tempo_espera > 0:
-                print(f"[CRON] Aguardando {round(tempo_espera/3600, 2)} hours...")
+                print(f"[CRON] Dormindo por {round(tempo_espera/3600, 2)} horas ate a virada do Hub...")
                 time.sleep(tempo_espera)
                 
             atualizar_inteligencia_diaria()
             gerar_e_enviar_sinais()
             time.sleep(10)
         except Exception as e:
-            print(f"[CRON-ERR] Loop reset: {e}")
+            print(f"[CRON-ERR] Reiniciando relogio: {e}")
             time.sleep(30)
-
-def escutar_comandos_telegram():
-    if not bot:
-        return
-    @bot.message_handler(commands=['hoje', 'sinais'])
-    def demand_reply(message):
-        bot.reply_to(message, "⏳ <i>Buscando partidas reais...</i>", parse_mode="HTML")
-        gerar_e_enviar_sinais(destino_id=message.chat.id)
-    while True:
-        try:
-            bot.infinity_polling(timeout=20, long_polling_timeout=10)
-        except Exception as e:
-            print(f"[TELEGRAM-POLLING-ERR] Erro no polling: {e}")
-            time.sleep(10)
-
-@app.route('/')
-def home():
-    return jsonify({"status": "payload_delivered", "service": "Grilo Core AI"}), 200
 
 if __name__ == '__main__':
     carregar_historico()
     
-    t1 = Thread(target=loop_relogio_diario)
-    t1.daemon = True
-    t1.start()
-    
+    # Inicia o escutador de comandos em uma thread separada para nao travar o relogio
     if bot:
-        t2 = Thread(target=escutar_comandos_telegram)
+        print("[SISTEMA] Iniciando monitor de comandos do Telegram (/sinais)...")
+        def iniciar_polling():
+            while True:
+                try:
+                    @bot.message_handler(commands=['hoje', 'sinais'])
+                    def demand_reply(message):
+                        bot.reply_to(message, "⏳ <i>Processando a grade de hoje...</i>", parse_mode="HTML")
+                        gerar_e_enviar_sinais(destino_id=message.chat.id)
+                    bot.infinity_polling(timeout=20, long_polling_timeout=10)
+                except Exception as e:
+                    print(f"[TELEGRAM-ERR] Erro no polling: {e}")
+                    time.sleep(10)
+        
+        t_bot = Thread(target=iniciar_polling)
+        t_bot.daemon = True
+        t_bot.start()
+    
