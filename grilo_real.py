@@ -5,7 +5,7 @@ import json
 import telebot
 import time
 import random
-import requests  # Injeção para busca de dados dinâmicos em live
+import requests  # Injeção para varredura de dados dinâmicos na rede externa
 from threading import Thread
 from datetime import datetime, timedelta, timezone
 from flask import Flask, jsonify
@@ -27,7 +27,7 @@ def carregar_historico():
         try:
             with open(ARQUIVO_HISTORICO, "r", encoding="utf-8") as f:
                 HISTORICO_IA = json.load(f)
-            print("[SYS-IA] Memoria carregada.")
+            print("[SYS-IA] Memoria carregada com sucesso.")
         except Exception as e:
             print(f"[SYS-IA] Erro I/O: {e}")
     else:
@@ -37,14 +37,14 @@ def salvar_historico():
     try:
         with open(ARQUIVO_HISTORICO, "w", encoding="utf-8") as f:
             json.dump(HISTORICO_IA, f, ensure_ascii=False, indent=4)
-        print("[SYS-IA] Snapshot salvo.")
+        print("[SYS-IA] Snapshot da memoria salvo.")
     except Exception as e:
         print(f"[SYS-IA] Erro gravacao: {e}")
 
 def puxar_jogos_do_dia_reais():
     """
-    Varredura e extração de payload de partidas reais na API do Cartola.
-    Contém cabeçalhos simulados (User-Agent) para evitar firewalls.
+    Varredura e extração de payload de partidas reais na API pública do Cartola FC.
+    Bypass com cabeçalho simulado para evitar bloqueios de firewall.
     """
     fuso_br = timezone(timedelta(hours=-3))
     hoje_br = datetime.now(fuso_br)
@@ -53,9 +53,8 @@ def puxar_jogos_do_dia_reais():
     jogos_filtrados = []
     url_cartola = "https://globo.com"
     
-    # Bypass simples: fingindo ser um navegador real buscando os dados
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
     
     try:
@@ -68,10 +67,11 @@ def puxar_jogos_do_dia_reais():
             partidas = dados.get("partidas", [])
             
             for p in partidas:
-                data_jogo_raw = p.get("partida_data")  # Formato esperado: "AAAA-MM-DD HH:MM:SS"
-                if not data_jogo_raw:
+                data_jogo_raw = p.get("partida_data")  # Esperado: "2026-06-01 16:00:00"
+                if not data_jogo_raw or " " not in data_jogo_raw:
                     continue
                     
+                # Hacker Fix: Extrai a string pura 'AAAA-MM-DD' antes do espaço
                 data_jogo_YYYY_MM_DD = data_jogo_raw.split(" ")[0]
                 
                 if data_jogo_YYYY_MM_DD == data_hoje_str:
@@ -81,8 +81,9 @@ def puxar_jogos_do_dia_reais():
                     nome_casa = clubes.get(id_casa, {}).get("nome", "Time Casa")
                     nome_fora = clubes.get(id_fora, {}).get("nome", "Time Visitante")
                     
-                    # Captura o horário exato da string extraída
-                    horario_str = data_jogo_raw.split(" ")[1][:5] if len(data_jogo_raw.split(" ")) > 1 else "00:00"
+                    # Hacker Fix: Extrai exatamente o HH:MM tirando os segundos
+                    horario_cru = data_jogo_raw.split(" ")[1]
+                    horario_str = horario_cru[:5]
                     
                     zebra = random.choice([True, False])
                     desfalque = "⚠️ Crítico: Desfalques táticos importantes na equipe" if zebra else "📋 Plantel completo para a rodada"
@@ -109,7 +110,6 @@ def puxar_jogos_do_dia_reais():
             print(f"[API-ERR] Codigo HTTP inesperado recebido: {resposta.status_code}")
             
     except Exception as e:
-        # CORREÇÃO DA LINHA 216: Bloco Try/Except devidamente alinhado e tratado
         print(f"[API-ERR] Falha de conexao na API externa: {e}")
         
     return jogos_filtrados
@@ -137,12 +137,12 @@ def gerar_e_enviar_sinais(destino_id=None):
         try:
             msg_vazio = (
                 f"📅 <b>═════════ JOGOS DO DIA {data_header} ═════════</b>\n\n"
-                f"📋 Nenhuma partida oficial do Brasileirão registrada para as próximas horas."
+                f"📋 Nenhuma partida oficial do Brasileirão registrada para as próximas horas do dia de hoje."
             )
             bot.send_message(alvo, text=msg_vazio, parse_mode="HTML")
             return
         except Exception as e:
-            print(f"[ERR-TG] Inundacao de buffer falhou: {e}")
+            print(f"[ERR-TG] Falha ao enviar aviso de dia sem jogos: {e}")
             return
 
     try:
@@ -211,5 +211,3 @@ def loop_relogio_diario():
             agora = datetime.now(fuso_br)
             amanha = agora + timedelta(days=1)
             alvo = datetime(amanha.year, amanha.month, amanha.day, 0, 0, 0, tzinfo=fuso_br)
-            time.sleep((alvo - agora).total_seconds())
-            atualizar_inteligencia_diaria()
