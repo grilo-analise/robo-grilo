@@ -15,6 +15,15 @@ sys.stdout.reconfigure(line_buffering=True)
 TOKEN = os.environ.get('TELEGRAM_TOKEN', '').strip()
 CHAT_ID = os.environ.get('CHAT_SINAIS_ID', '').strip()
 
+# Inicialização segura: deleta webhooks antigos para evitar o Erro 409
+if TOKEN:
+    try:
+        temp_bot = telebot.TeleBot(TOKEN)
+        temp_bot.delete_webhook(drop_pending_updates=True)
+        print("[HACK-NET] Instâncias antigas limpas com sucesso.")
+    except Exception as e:
+        print(f"[HACK-NET] Erro ao limpar conexões pendentes: {e}")
+
 bot = telebot.TeleBot(TOKEN) if TOKEN else None
 app = Flask(__name__)
 
@@ -43,14 +52,12 @@ def salvar_historico():
 
 def puxar_jogos_do_dia_reais():
     hoje_br = datetime.now(timezone(timedelta(hours=-3)))
-    
-    # API global descentralizada sem necessidade de tokens (cobre todas as ligas globais do dia)
     url = f"https://open-ligadb.de{hoje_br.year}/{hoje_br.month}/{hoje_br.day}"
     
     try:
         resposta = requests.get(url, timeout=12)
         if resposta.status_code == 200:
-            dados = resposta.json()
+            dados = response_data = resposta.json()
             jogos_reais = []
             
             for partida in dados:
@@ -61,13 +68,14 @@ def puxar_jogos_do_dia_reais():
                 if not time_casa or not time_fora:
                     continue
                     
-                # Correção do Horário: Evita a quebra do script separando os dados com segurança
+                # Extração segura e tática do horário para evitar quebras de string
                 horario_str = "16:00"
                 match_date_raw = partida.get("matchDateTime")
                 if match_date_raw and "T" in match_date_raw:
                     try:
-                        # Extrai de forma limpa os caracteres de hora e minuto (ex: 15:30)
-                        horario_str = match_date_raw.split("T")[1][:5]
+                        # Pega a parte após o 'T' e extrai os primeiros 5 caracteres (HH:MM)
+                        tempo_limpo = match_date_raw.split("T")[1]
+                        horario_str = tempo_limpo[:5]
                     except Exception:
                         horario_str = "16:00"
 
@@ -89,13 +97,12 @@ def puxar_jogos_do_dia_reais():
                 
             if jogos_reais:
                 print(f"[API] {len(jogos_reais)} partidas globais carregadas para hoje.")
-                # Amostra aleatória controlada para evitar estourar o limite de caracteres do Telegram
+                # Coleta uma amostra de até 6 jogos do catálogo mundial
                 return random.sample(jogos_reais, min(len(jogos_reais), 6))
                 
     except Exception as e:
         print(f"[ERR-API] Falha ao ler catálogo global: {e}")
         
-    # Mensagem tática de contingência caso a resposta da API venha totalmente vazia
     return [
         {
             "liga_nome": "Filtro de Cobertura Mundial", 
@@ -104,7 +111,7 @@ def puxar_jogos_do_dia_reais():
             "time_fora": "no banco de dados", 
             "horario": hoje_br.strftime('%H:%M'), 
             "zebra_detectada": False, 
-            "desfalque": "📋 Grade de transmissões esportivas sem alterações no momento.", 
+            "desfalque": "📋 Grade de transmissões esportivas sem alterações.", 
             "placares_sugeridos": "- x -", 
             "casa_amarelos_med": 0.0, 
             "fora_amarelos_med": 0.0, 
@@ -208,11 +215,3 @@ def escutar_comandos_telegram():
     @bot.message_handler(commands=['hoje', 'sinais'])
     def demand_reply(message):
         bot.reply_to(message, "⏳ <i>Compilando metricas do servidor...</i>", parse_mode="HTML")
-        gerar_e_enviar_sinais(destino_id=message.chat.id)
-    while True:
-        try:
-            bot.infinity_polling(timeout=20, long_polling_timeout=10)
-        except Exception:
-            time.sleep(10)
-
-@app.route('/')
