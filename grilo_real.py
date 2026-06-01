@@ -23,8 +23,8 @@ HISTORICO_IA = {"total_analises": 145, "acertos": 112, "taxa_acerto_atual": 77.2
 
 SINAIS_ENVIADOS_HOJE = set()
 
-# FIX: Estrutura fechada corretamente com ID interno de torneios elite (Sofascore)
-LIGAS_PERMITIDAS = [325, 17, 8, 23, 34, 7, 35, 18] 
+# IDs de ligas principais no Sofascore
+LIGAS_PERMITIDAS = [17, 8, 23, 325, 323, 7, 676]
 
 def carregar_historico():
     global HISTORICO_IA
@@ -47,10 +47,6 @@ def salvar_historico():
         print(f"[SYS-IA] Erro na gravacao do snapshot: {e}")
 
 def puxar_jogos_do_dia_reais():
-    """
-    Minera a grade do Sofascore de forma publica simulando o navegador.
-    Dispensa chaves proprietarias e tokens pagos.
-    """
     try:
         fuso_br = datetime.now(timezone(timedelta(hours=-3)))
         data_hoje = fuso_br.strftime('%Y-%m-%d')
@@ -58,7 +54,7 @@ def puxar_jogos_do_dia_reais():
         
         url = f"https://sofascore.com{data_hoje}"
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         }
         
         response = requests.get(url, headers=headers, timeout=12)
@@ -89,7 +85,7 @@ def puxar_jogos_do_dia_reais():
                     })
         
         if not jogos_reais:
-            print("[API] Sem partidas de elite ativas na API publica. Iniciando redundancia de contingencia...")
+            print("[API] Iniciando redundancia de contingencia...")
             contingencia = [
                 ("Flamengo", "Palmeiras", "BRASILEIRÃO"), ("Real Madrid", "Barcelona", "LA LIGA"),
                 ("Man. City", "Liverpool", "PREMIER LEAGUE"), ("São Paulo", "Corinthians", "BRASILEIRÃO")
@@ -199,4 +195,9 @@ def gerar_e_enviar_sinais(destino_id=None, ignorar_filtro=False):
             )
             bot.send_message(alvo, text=msg, parse_mode="HTML")
             
+            # CORRIGIDO: Recuo de 4 espaços aplicado perfeitamente abaixo da condicional 'if'
             if not ignorar_filtro:
+                SINAIS_ENVIADOS_HOJE.add(id_jogo)
+                
+            time.sleep(2.0)
+        except Exception as game_error:
