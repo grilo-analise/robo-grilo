@@ -71,10 +71,8 @@ def puxar_jogos_do_dia_reais():
                 return backup_jogos
 
             jogos_formatados = []
-            # Limta a no máximo 6 jogos para evitar spam e limites do Telegram
             for m in matches[:6]: 
                 try:
-                    # Tratamento e conversão de fuso horário UTC -> Brasil
                     utc_time_str = m["utcDate"].replace("Z", "+00:00")
                     utc_dt = datetime.fromisoformat(utc_time_str)
                     br_dt = utc_dt.astimezone(timezone(timedelta(hours=-3)))
@@ -205,3 +203,6 @@ def loop_relogio_diario():
                 alvo += timedelta(days=1)
             
             segundos_espera = (alvo - agora).total_seconds()
+            print(f"[CRON] Aguardando {segundos_espera:.2f} segundos ate o proximo disparo agendado (07:00).")
+            
+            time.sleep(segundos_espera)
