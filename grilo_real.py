@@ -203,15 +203,16 @@ def gerar_e_enviar_sinais(destino_id=None, ignorar_filtro=False):
 def loop_relogio_diario():
     global SINAIS_ENVIADOS_HOJE
     print("[CRON] Inicializando daemon de contagem temporal.")
-    atualizar_inteligencia_diaria()
-    gerar_e_enviar_sinais()
+    carregar_historico()  # Executa a leitura da memória ao iniciar
+    
     while True:
         try:
+            atualizar_inteligencia_diaria()
+            gerar_e_enviar_sinais()
+            
             fuso_br = timezone(timedelta(hours=-3))
             agora = datetime.now(fuso_br)
             amanha = agora + timedelta(days=1)
             alvo = datetime(amanha.year, amanha.month, amanha.day, 0, 5, 0, tzinfo=fuso_br)
             
             tempo_espera = (alvo - agora).total_seconds()
-            time.sleep(tempo_espera)
-            
