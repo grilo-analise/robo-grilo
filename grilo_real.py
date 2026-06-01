@@ -224,7 +224,7 @@ def loop_relogio_diario():
             
             tempo_espera = (alvo - agora).total_seconds()
             if tempo_espera > 0:
-                print(f"[CRON] Aguardando {round(tempo_espera/3600, 2)} horas para o Hub...")
+                print(f"[CRON] Aguardando {round(tempo_espera/3600, 2)} hours...")
                 time.sleep(tempo_espera)
                 
             atualizar_inteligencia_diaria()
@@ -239,7 +239,7 @@ def escutar_comandos_telegram():
         return
     @bot.message_handler(commands=['hoje', 'sinais'])
     def demand_reply(message):
-        bot.reply_to(message, "⏳ <i>Buscando partidas reais no servidor internacional...</i>", parse_mode="HTML")
+        bot.reply_to(message, "⏳ <i>Buscando partidas reais...</i>", parse_mode="HTML")
         gerar_e_enviar_sinais(destino_id=message.chat.id)
     while True:
         try:
@@ -260,3 +260,4 @@ if __name__ == '__main__':
     t1.start()
     
     if bot:
+        t2 = Thread(target=escutar_comandos_telegram)
