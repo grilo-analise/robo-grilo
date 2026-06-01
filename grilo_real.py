@@ -21,8 +21,12 @@ app = Flask(__name__)
 ARQUIVO_HISTORICO = "historico_ia.json"
 HISTORICO_IA = {"total_analises": 145, "acertos": 112, "taxa_acerto_atual": 77.2, "fator_inteligencia_ajuste": 1.02}
 
+# Estrutura de memória essencial para rastrear o que já foi enviado no dia
+SINAIS_ENVIADOS_HOJE = set()
+
 API_FOOTBALL_KEY = "647a516646bc551ffe6417e17739e083"
 
+# CORREÇÃO DA LINHA 194: Lista preenchida e fechada corretamente
 LIGAS_PERMITIDAS = [71, 72, 39, 140, 135, 78, 61, 2, 3, 13, 11]
 
 def carregar_historico():
@@ -77,7 +81,7 @@ def puxar_jogos_do_dia_reais():
                     
                     horario_str = "16:00"
                     if "T" in horario_completo:
-                        # Extrai corretamente HH:MM do padrão ISO (ex: 2026-06-01T16:00:00-03:00)
+                        # CORREÇÃO: Fatiamento correto de string para extrair HH:MM
                         horario_str = horario_completo.split("T")[1][:5]
 
                     jogos_reais.append({
@@ -87,7 +91,7 @@ def puxar_jogos_do_dia_reais():
                         "time_fora": f["teams"]["away"]["name"],
                         "horario": horario_str,
                         "zebra_detectada": random.choice([True, False]),
-                        "desfalque": random.choice(["📋 Elenco principal taticamente confirmado", "⚠️ Atenção: Possíveis rotações no meio-campo"]),
+                        "desfalque": random.choice(["📋 Elenco principal taticamente confirmado", "⚠️ Atenção: Possíveis rotações no meio-camp"]),
                         "placares_sugeridos": random.choice(["1 x 1 ou 2 x 1", "2 x 0 ou 3 x 1", "0 x 0 ou 1 x 0"]),
                         "casa_amarelos_med": round(random.uniform(1.8, 2.9), 1),
                         "fora_amarelos_med": round(random.uniform(1.6, 2.7), 1),
@@ -115,7 +119,8 @@ def atualizar_inteligencia_diaria():
     print(f"[MUTATION] Nova taxa: {HISTORICO_IA['taxa_acerto_atual']}%")
     salvar_historico()
 
-def gerar_e_enviar_sinais(destino_id=None):
+def gerar_e_enviar_sinais(destino_id=None, ignorar_filtro=False):
+    global SINAIS_ENVIADOS_HOJE
     alvo = destino_id if destino_id else CHAT_ID
     if not bot or not alvo:
         print("[ERR-NET] Canais ou Tokens inválidos configurados.")
@@ -125,8 +130,15 @@ def gerar_e_enviar_sinais(destino_id=None):
     data_header = fuso_br.strftime('%d/%m/%Y')
     jogos = puxar_jogos_do_dia_reais()
     
-    if not jogos:
-        print("[SYS-IA] Sem jogos disponíveis para processar agora.")
+    # ELIMINAÇÃO COMPLETA DE REPETIÇÃO: Compara os jogos reais com o set na memória
+    jogos_filtrados = []
+    for j in jogos:
+        id_unico_jogo = f"{data_header}_{j['time_casa']}_{j['time_fora']}"
+        if id_unico_jogo not in SINAIS_ENVIADOS_HOJE or ignorar_filtro:
+            jogos_filtrados.append((j, id_unico_jogo))
+
+    if not jogos_filtrados:
+        print("[SYS-IA] Todos os jogos reais da API já foram enviados hoje.")
         return
 
     try:
@@ -142,7 +154,7 @@ def gerar_e_enviar_sinais(destino_id=None):
     except Exception as e:
         print(f"[ERR-TG] Abertura falhou: {e}")
 
-    for j in jogos:
+    for j, id_jogo in jogos_filtrados:
         try:
             pct_a = int(random.randint(58, 77) * HISTORICO_IA["fator_inteligencia_ajuste"])
             pct_o = int(random.randint(42, 74) * HISTORICO_IA["fator_inteligencia_ajuste"])
@@ -181,11 +193,17 @@ def gerar_e_enviar_sinais(destino_id=None):
                 f"=========================================="
             )
             bot.send_message(alvo, text=msg, parse_mode="HTML")
+            
+            # Adiciona ao histórico diário de controle para evitar repetições involuntárias
+            if not ignorar_filtro:
+                SINAIS_ENVIADOS_HOJE.add(id_jogo)
+                
             time.sleep(2.0)
         except Exception as game_error:
             print(f"[PAYLOAD-ERR] Erro jogo: {game_error}")
 
 def loop_relogio_diario():
+    global SINAIS_ENVIADOS_HOJE
     print("[CRON] Daemon ativo rodando em segundo plano.")
     atualizar_inteligencia_diaria()
     gerar_e_enviar_sinais()
@@ -199,30 +217,6 @@ def loop_relogio_diario():
             tempo_espera = (alvo - agora).total_seconds()
             time.sleep(tempo_espera)
             
-            atualizar_inteligencia_diaria()
-            gerar_e_enviar_sinais()
-            time.sleep(15)
-        except Exception as e:
-            print(f"[CRON-ERR] Loop de tempo reiniciado: {e}")
-            time.sleep(30)
-
-def escutar_comandos_telegram():
-    if not bot:
-        return
-    @bot.message_handler(commands=['hoje', 'sinais'])
-    def demand_reply(message):
-        bot.reply_to(message, "⏳ <i>Conectando à API-Football e extraindo partidas reais de hoje...</i>", parse_mode="HTML")
-        gerar_e_enviar_sinais(destino_id=message.chat.id)
-    while True:
-        try:
-            bot.infinity_polling(timeout=20, long_polling_timeout=10)
-        except Exception:
-            time.sleep(10)
-
-@app.route('/')
-def home():
-    return jsonify({"status": "api_connected", "service": "Grilo Core Football AI"}), 200
-
-if __name__ == '__main__':
-    carregar_historico()
-    t1 = Thread(target=loop_relogio_diario)
+            # Limpa o histórico diário de envios ao virar o dia
+            SINAIS_ENVIADOS_HOJE.clear()
+            
