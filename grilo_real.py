@@ -43,9 +43,8 @@ def salvar_historico():
 
 def puxar_jogos_do_dia_reais():
     hoje_br = datetime.now(timezone(timedelta(hours=-3)))
-    data_str = hoje_br.strftime('%Y-%m-%d')
     
-    # API global descentralizada (não exige token e cobre todas as ligas do mundo)
+    # API global descentralizada sem necessidade de tokens (cobre todas as ligas globais do dia)
     url = f"https://open-ligadb.de{hoje_br.year}/{hoje_br.month}/{hoje_br.day}"
     
     try:
@@ -62,15 +61,15 @@ def puxar_jogos_do_dia_reais():
                 if not time_casa or not time_fora:
                     continue
                     
-                # Trata o horário da partida
+                # Correção do Horário: Evita a quebra do script separando os dados com segurança
                 horario_str = "16:00"
                 match_date_raw = partida.get("matchDateTime")
-                if match_date_raw:
+                if match_date_raw and "T" in match_date_raw:
                     try:
-                        # Corta o fuso caso exista e pega apenas hora/minuto
+                        # Extrai de forma limpa os caracteres de hora e minuto (ex: 15:30)
                         horario_str = match_date_raw.split("T")[1][:5]
-                    except:
-                        pass
+                    except Exception:
+                        horario_str = "16:00"
 
                 jogo_formatado = {
                     "liga_nome": league_info,
@@ -90,22 +89,22 @@ def puxar_jogos_do_dia_reais():
                 
             if jogos_reais:
                 print(f"[API] {len(jogos_reais)} partidas globais carregadas para hoje.")
-                # Retorna no máximo 8 jogos do catálogo mundial para evitar spam
-                return random.sample(jogos_reais, min(len(jogos_reais), 8))
+                # Amostra aleatória controlada para evitar estourar o limite de caracteres do Telegram
+                return random.sample(jogos_reais, min(len(jogos_reais), 6))
                 
     except Exception as e:
         print(f"[ERR-API] Falha ao ler catálogo global: {e}")
         
-    # Proteção estrita antiduplicidade se o servidor falhar: avisa o canal em vez de repetir jogos antigos
+    # Mensagem tática de contingência caso a resposta da API venha totalmente vazia
     return [
         {
-            "liga_nome": "Monitoramento Global", 
+            "liga_nome": "Filtro de Cobertura Mundial", 
             "pais": "MUNDO", 
             "time_casa": "Buscando novas ligas", 
             "time_fora": "no banco de dados", 
             "horario": hoje_br.strftime('%H:%M'), 
             "zebra_detectada": False, 
-            "desfalque": "📋 Aguardando fechamento do fuso horário comercial.", 
+            "desfalque": "📋 Grade de transmissões esportivas sem alterações no momento.", 
             "placares_sugeridos": "- x -", 
             "casa_amarelos_med": 0.0, 
             "fora_amarelos_med": 0.0, 
@@ -156,7 +155,7 @@ def gerar_e_enviar_sinais(destino_id=None):
             esc = round(random.uniform(8.8, 11.8), 1)
             tot_c = round(j["casa_amarelos_med"] + j["fora_amarelos_med"], 1)
             cmd_sug = "🚨 <b>ALTA PROBABILIDADE DE ZEBRA!</b> 🔥\nHandicap (+) visitante ou dupla chance." if j["zebra_detectada"] else "🔥 ENTRADA DE VALOR: Gols Asiáticos pré-live."
-            cmd_ind = "✅ Entrada baseada em quebra de padrão tático." if j["zebra_detectada"] else "Analisar comportamento tático nos primeiros 15 minutos em Live."
+            cmd_ind = "✅ Entrada baseada em quebra de padrão tático." if j["zebra_detectada"] else "Analisar comportamento tático nos primeiros 15 minutos in Live."
             msg = (
                 f"⚔️ <b>PARTIDA:</b> <b>{j['time_casa']}</b> x <b>{j['time_fora']}</b>\n"
                 f"📆 <b>DATA DO JOGO:</b> {data_header} às {j['horario']}\n"
@@ -217,6 +216,3 @@ def escutar_comandos_telegram():
             time.sleep(10)
 
 @app.route('/')
-def home():
-    return jsonify({"status": "payload_delivered", "service": "Grilo Core AI"}), 200
-
