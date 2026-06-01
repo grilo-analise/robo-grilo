@@ -162,13 +162,13 @@ def gerar_e_enviar_sinais(destino_id=None):
         return
 
     try:
-        abertura = (
-            f"📅 <b>═════════ JOGOS DO DIA {data_header} ═════════</b>\n\n"
-            f"📋 <b>BOLETIM FLASHSCORE - JOGOS DO DIA</b>\n"
-            f"📅 <b>EMISSÃO:</b> {data_header} às {fuso_br.strftime('%H:%M')}\n"
-            f"🎯 <b>ASSERTIVIDADE DA IA DIÁRIA:</b> ✅ {HISTORICO_IA['taxa_acerto_atual']}% de Green acumulado\n"
-            f"🌍 <b>FILTRO ATIVO:</b> Análise tática pura"
-        )
+        abertura = f"""📅 <b>═════════ JOGOS DO DIA {data_header} ═════════</b>
+
+📋 <b>BOLETIM FLASHSCORE - JOGOS DO DIA</b>
+📅 <b>EMISSÃO:</b> {data_header} às {fuso_br.strftime('%H:%M')}
+🎯 <b>ASSERTIVIDADE DA IA DIÁRIA:</b> ✅ {HISTORICO_IA['taxa_acerto_atual']}% de Green acumulado
+🌍 <b>FILTRO ATIVO:</b> Análise tática pura"""
+
         bot.send_message(alvo, text=abertura, parse_mode="HTML")
         time.sleep(1.5)
     except Exception as e:
@@ -191,23 +191,46 @@ def gerar_e_enviar_sinais(destino_id=None):
             cmd_sug = "🚨 <b>ALTA PROBABILIDADE DE ZEBRA!</b> 🔥\nHandicap (+) visitante ou dupla chance." if j["zebra_detectada"] else "🔥 ENTRADA DE VALOR: Gols Asiáticos pré-live."
             cmd_ind = "✅ Entrada baseada em quebra de padrão tático." if j["zebra_detectada"] else "Analisar comportamento tático nos primeiros 15 minutos em Live."
             
-            msg = (
-                f"⚔️ <b>PARTIDA:</b> <b>{j['time_casa']}</b> x <b>{j['time_fora']}</b>\n"
-                f"📆 <b>DATA DO JOGO:</b> {data_header} às {j['horario']}\n"
-                f"⚽ <b>COMPETIÇÃO:</b> {j['pais']} - {j['liga_nome']}\n"
-                f"📈 Vantagem tática calculada através da rede neural com base no retrospecto\n\n"
-                f"📊 <b>AMBAS MARCAM:</b> {pct_a}% | 📈 <b>+2.5 GOLS:</b> {pct_o}%\n"
-                f"🎯 <b>MÉDIA CHUTES NO GOL:</b> Casa: {c_casa} | Fora: {c_fora}\n"
-                f"🔄 <b>PASSES ESTIMADOS:</b> Casa: {p_casa} | Fora: {p_fora}\n"
-                f"🚩 <b>ESC_ESTIMADOS:</b> {esc} por partida\n"
-                f"🥅 <b>PROBABILIDADE PÊNALTI:</b> SIM (VAR)\n\n"
-                f"🟨 <b>MÉDIA CARTÕES AMARELOS:</b>\n"
-                f"🏠 Casa ({j['time_casa']}): {j['casa_amarelos_med']}\n"
-                f"🚀 Fora ({j['time_fora']}): {j['fora_amarelos_med']}\n"
-                f"📊 <b>ESTIMATIVA TOTAL DO JOGO:</b> {tot_c} cartões\n\n"
-                f"🟨 <b>⚠️ JOGADORES PENDURADOS (RISCO):</b>\n"
-                f"🏠 {j['time_casa']}: <b>{j['casa_jogadores_pendurados']}</b> com amarelo\n"
-                f"🚀 {j['time_fora']}: <b>{j['fora_jogadores_pendurados']}</b> com amarelo\n\n"
-                f"📋 <b>ANÁLISE DE DESFALQUES:</b>\n{j['desfalque']}\n\n"
-                f"🎲 <b>RESULTADO ESTIMADO:</b> {j['placares_sugeridos']}\n\n"
-                f"🔷 <b>APOSTA SUGERIDA (CENÁRIO DE CAMPO):</b>\n{cmd_sug}\n\n"
+            msg = f"""⚔️ <b>PARTIDA:</b> <b>{j['time_casa']}</b> x <b>{j['time_fora']}</b>
+📆 <b>DATA DO JOGO:</b> {data_header} às {j['horario']}
+⚽ <b>COMPETIÇÃO:</b> {j['pais']} - {j['liga_nome']}
+📈 Vantagem tática calculada através da rede neural com base no retrospecto
+
+📊 <b>AMBAS MARCAM:</b> {pct_a}% | 📈 <b>+2.5 GOLS:</b> {pct_o}%
+🎯 <b>MÉDIA CHUTES NO GOL:</b> Casa: {c_casa} | Fora: {c_fora}
+🔄 <b>PASSES ESTIMADOS:</b> Casa: {p_casa} | Fora: {p_fora}
+🚩 <b>ESC_ESTIMADOS:</b> {esc} por partida
+🥅 <b>PROBABILIDADE PÊNALTI:</b> SIM (VAR)
+
+🟨 <b>MÉDIA CARTÕES AMARELOS:</b>
+🏠 Casa ({j['time_casa']}): {j['casa_amarelos_med']}
+🚀 Fora ({j['time_fora']}): {j['fora_amarelos_med']}
+📊 <b>ESTIMATIVA TOTAL DO JOGO:</b> {tot_c} cartões
+
+🟨 <b>⚠️ JOGADORES PENDURADOS (RISCO):</b>
+🏠 {j['time_casa']}: <b>{j['casa_jogadores_pendurados']}</b> com amarelo
+🚀 {j['time_fora']}: <b>{j['fora_jogadores_pendurados']}</b> com amarelo
+
+📋 <b>ANÁLISE DE DESFALQUES:</b>
+{j['desfalque']}
+
+🎲 <b>RESULTADO ESTIMADO:</b> {j['placares_sugeridos']}
+
+🔷 <b>APOSTA SUGERIDA (CENÁRIO DE CAMPO):</b>
+{cmd_sug}
+
+💡 <b>Indicação:</b> {cmd_ind}
+=========================================="""
+
+            bot.send_message(alvo, text=msg, parse_mode="HTML")
+            time.sleep(1.5)
+        except Exception as game_error:
+            print(f"[PAYLOAD-ERR] Erro jogo: {game_error}")
+
+def loop_relogio_diario():
+    print("[CRON] Daemon ativo sincronizado com o fuso do Hub.")
+    atualizar_inteligencia_diaria()
+    gerar_e_enviar_sinais()
+    
+    while True:
+        try:
