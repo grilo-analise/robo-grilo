@@ -41,9 +41,24 @@ def salvar_historico():
         print(f"[SYS-IA] Erro gravacao: {e}")
 
 def puxar_jogos_do_dia_reais():
-    # Os 4 times estáticos (Vasco, Palmeiras, Bragantino, Cruzeiro) foram removidos daqui.
-    # Retorna uma lista vazia para você integrar com a sua API de captura em tempo real.
-    return []
+    # Retorna um jogo ativo para o bot ter dados e enviar o sinal agora.
+    # Substitua essa lista pela integracao do seu raspador automatizado.
+    return [
+        {
+            "liga_nome": "Champions League", 
+            "pais": "EUROPA", 
+            "time_casa": "Real Madrid", 
+            "time_fora": "Barcelona", 
+            "horario": "16:00", 
+            "zebra_detectada": False, 
+            "desfalque": "📋 Plantel completo para a rodada", 
+            "placares_sugeridos": "2 x 1 ou 3 x 2", 
+            "casa_amarelos_med": 1.8, 
+            "fora_amarelos_med": 2.5, 
+            "casa_jogadores_pendurados": 2, 
+            "fora_jogadores_pendurados": 3
+        }
+    ]
 
 def atualizar_inteligencia_diaria():
     global HISTORICO_IA
@@ -123,14 +138,14 @@ def gerar_e_enviar_sinais(destino_id=None):
 
 def loop_relogio_diario():
     print("[CRON] Daemon ativo - Disparando sinais imediatamente agora.")
-    # Executa a primeira vez no exato momento da inicializacao
+    # Executa no exato instante em que o servidor sobe online
     atualizar_inteligencia_diaria()
     gerar_e_enviar_sinais()
     
-    # Mantém o loop verificando a cada hora para rodar de hora em hora
+    # Mantem a varredura ativa de hora em hora
     while True:
         try:
-            time.sleep(3600)  # Aguarda 1 hora até a próxima varredura de sinais
+            time.sleep(3600)  # Aguarda 1 hora
             atualizar_inteligencia_diaria()
             gerar_e_enviar_sinais()
         except Exception as e:
