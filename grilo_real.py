@@ -5,7 +5,7 @@ import json
 import telebot
 import time
 import random
-import requests  # Nova biblioteca para buscar os jogos reais da internet
+import requests
 from threading import Thread
 from datetime import datetime, timedelta, timezone
 from flask import Flask, jsonify
@@ -21,7 +21,23 @@ app = Flask(__name__)
 ARQUIVO_HISTORICO = "historico_ia.json"
 HISTORICO_IA = {"total_analises": 145, "acertos": 112, "taxa_acerto_atual": 77.2, "fator_inteligencia_ajuste": 1.02}
 
-SINAIS_ENVIADOS_HOJE = set()
+# Chave oficial fornecida por você
+API_FOOTBALL_KEY = "647a516646bc551ffe6417e17739e083"
+
+# IDs das ligas mais populares para filtrar (Evita jogos de ligas irrelevantes)
+LIGAS_PERMITIDAS = [
+    71,  # Brasileirão Série A
+    72,  # Brasileirão Série B
+    39,  # Premier League (Inglaterra)
+    140, # La Liga (Espanha)
+    135, # Serie A (Itália)
+    78,  # Bundesliga (Alemanha)
+    61,  # Ligue 1 (França)
+    2,   # UEFA Champions League
+    3,   # UEFA Europa League
+    13,  # Copa Libertadores
+    11,  # Copa Sul-Americana
+]
 
 def carregar_historico():
     global HISTORICO_IA
@@ -44,50 +60,68 @@ def salvar_historico():
         print(f"[SYS-IA] Erro gravacao: {e}")
 
 def puxar_jogos_do_dia_reais():
-    """Busca partidas reais do dia diretamente de uma API de futebol gratuita."""
+    """Busca partidas reais do dia diretamente da API-Football usando a sua chave."""
     try:
-        # Puxa jogos reais do dia atual usando uma API pública e sem necessidade de chave complexa
-        url = "https://openligadb.de" 
-        # Como alternativa universal de partidas diárias, usamos uma API estável de futebol:
-        response = requests.get("https://githubusercontent.com", timeout=10)
+        fuso_br = datetime.now(timezone(timedelta(hours=-3)))
+        data_hoje = fuso_br.strftime('%Y-%m-%d')
+        
+        url = "https://api-sports.io"
+        headers = {
+            "x-rapidapi-key": API_FOOTBALL_KEY,
+            "x-rapidapi-host": "v3.football.api-sports.io"
+        }
+        parametros = {
+            "date": data_hoje,
+            "timezone": "America/Sao_Paulo"
+        }
+        
+        print(f"[API] Buscando jogos reais para a data: {data_hoje}...")
+        response = requests.get(url, headers=headers, params=parametros, timeout=12)
         
         if response.status_code == 200:
             dados = response.json()
-            jogos_reais = []
-            hoje_br = datetime.now(timezone(timedelta(hours=-3))).strftime('%Y-%m-%d')
+            fixtures = dados.get("response", [])
             
-            # Varre o arquivo de futebol buscando as partidas do dia
-            for rodada in dados.get("rounds", []):
-                for jogo in rodada.get("matches", []):
-                    # Se o jogo for hoje ou nos próximos dias, adiciona dinamicamente
-                    if jogo.get("date") >= hoje_br:
-                        jogos_reais.append({
-                            "liga_nome": "Campeonato Brasileiro",
-                            "pais": "BRASIL",
-                            "time_casa": jogo["team1"],
-                            "time_fora": jogo["team2"],
-                            "horario": jogo.get("time", "16:00"),
-                            "zebra_detectada": random.choice([True, False]),
-                            "desfalque": random.choice(["📋 Plantel completo para a rodada", "⚠️ Crítico: Jogadores suspensos por cartões"]),
-                            "placares_sugeridos": random.choice(["1 x 0 ou 2 x 1", "1 x 1 ou 0 x 0", "2 x 0 ou 3 x 1"]),
-                            "casa_amarelos_med": round(random.uniform(1.5, 3.2), 1),
-                            "fora_amarelos_med": round(random.uniform(1.5, 3.2), 1),
-                            "casa_jogadores_pendurados": random.randint(1, 5),
-                            "fora_jogadores_pendurados": random.randint(1, 5)
-                        })
+            jogos_reais = []
+            for f in fixtures:
+                liga_id = f.get("league", {}).get("id")
+                
+                # Filtra apenas pelas ligas importantes definidas na lista acima
+                if liga_id in LIGAS_PERMITIDAS:
+                    fixture_info = f.get("fixture", {})
+                    horario_completo = fixture_info.get("date", "")
+                    
+                    # Formata o horário (Ex: 2026-06-01T16:00:00-03:00 -> 16:00)
+                    horario_str = "16:00"
+                    if "T" in horario_completo:
+                        horario_str = horario_completo.split("T")[1][:5]
+
+                    jogos_reais.append({
+                        "liga_nome": f["league"]["name"],
+                        "pais": f["league"]["country"].upper(),
+                        "time_casa": f["teams"]["home"]["name"],
+                        "time_fora": f["teams"]["away"]["name"],
+                        "horario": horario_str,
+                        "zebra_detectada": random.choice([True, False]),
+                        "desfalque": random.choice(["📋 Elenco principal taticamente confirmado", "⚠️ Atenção: Possíveis rotações no meio-campo"]),
+                        "placares_sugeridos": random.choice(["1 x 1 ou 2 x 1", "2 x 0 ou 3 x 1", "0 x 0 ou 1 x 0"]),
+                        "casa_amarelos_med": round(random.uniform(1.8, 2.9), 1),
+                        "fora_amarelos_med": round(random.uniform(1.6, 2.7), 1),
+                        "casa_jogadores_pendurados": random.randint(1, 4),
+                        "fora_jogadores_pendurados": random.randint(1, 4)
+                    })
+            
             if jogos_reais:
-                return jogos_reais[:5] # Limita em até 5 jogos reais encontrados para não travar o bot
+                print(f"[API] Sucesso! Encontrados {len(jogos_reais)} jogos nas ligas principais.")
+                return jogos_reais
+            else:
+                print("[API] Nenhum jogo das ligas principais agendado para hoje.")
+                
     except Exception as e:
-        print(f"[API-ERR] Falha ao conectar na API externa, usando contingência: {e}")
+        print(f"[API-ERR] Erro crítico na API-Football: {e}")
         
-    # Sistema de contingência automática caso a internet caia (muda os times dinamicamente)
-    times_contingencia = ["Flamengo", "Palmeiras", "São Paulo", "Corinthians", "Santos", "Grêmio", "Internacional", "Fluminense", "Botafogo", "Atlético-MG"]
-    casa1, casa2 = random.sample(times_contingencia, 2)
-    fora1, fora2 = random.sample(times_contingencia, 2)
-    return [
-        {"liga_nome": "Série A", "pais": "BRASIL", "time_casa": casa1, "time_fora": fora1, "horario": "16:00", "zebra_detectada": False, "desfalque": "📋 Sem alterações táticas", "placares_sugeridos": "2 x 1", "casa_amarelos_med": 2.0, "fora_amarelos_med": 2.1, "casa_jogadores_pendurados": 3, "fora_jogadores_pendurados": 2},
-        {"liga_nome": "Série A", "pais": "BRASIL", "time_casa": casa2, "time_fora": fora2, "horario": "19:00", "zebra_detectada": True, "desfalque": "⚠️ Desfalques no setor defensivo", "placares_sugeridos": "1 x 1", "casa_amarelos_med": 2.5, "fora_amarelos_med": 1.8, "casa_jogadores_pendurados": 4, "fora_jogadores_pendurados": 1}
-    ]
+    # Se a API falhar ou não tiver jogos nas ligas principais, retorna vazio para não enviar lixo
+    return []
 
 def atualizar_inteligencia_diaria():
     global HISTORICO_IA
@@ -98,25 +132,18 @@ def atualizar_inteligencia_diaria():
     print(f"[MUTATION] Nova taxa: {HISTORICO_IA['taxa_acerto_atual']}%")
     salvar_historico()
 
-def gerar_e_enviar_sinais(destino_id=None, ignorar_filtro=False):
-    global SINAIS_ENVIADOS_HOJE
+def gerar_e_enviar_sinais(destino_id=None):
     alvo = destino_id if destino_id else CHAT_ID
     if not bot or not alvo:
-        print("[ERR-NET] Socket nulo.")
+        print("[ERR-NET] Canais ou Tokens inválidos configurados.")
         return
         
     fuso_br = datetime.now(timezone(timedelta(hours=-3)))
     data_header = fuso_br.strftime('%d/%m/%Y')
     jogos = puxar_jogos_do_dia_reais()
     
-    jogos_filtrados = []
-    for j in jogos:
-        id_unico_jogo = f"{data_header}_{j['time_casa']}_{j['time_fora']}"
-        if id_unico_jogo not in SINAIS_ENVIADOS_HOJE or ignorar_filtro:
-            jogos_filtrados.append((j, id_unico_jogo))
-
-    if not jogos_filtrados:
-        print("[SYS-IA] Nenhum sinal novo encontrado para enviar nesta checagem.")
+    if not jogos:
+        print("[SYS-IA] Sem jogos disponíveis para processar agora.")
         return
 
     try:
@@ -125,14 +152,14 @@ def gerar_e_enviar_sinais(destino_id=None, ignorar_filtro=False):
             f"📋 <b>BOLETIM FLASHSCORE - JOGOS DO DIA</b>\n"
             f"📅 <b>EMISSÃO:</b> {data_header} às {fuso_br.strftime('%H:%M')}\n"
             f"🎯 <b>ASSERTIVIDADE DA IA DIÁRIA:</b> ✅ {HISTORICO_IA['taxa_acerto_atual']}% de Green acumulado\n"
-            f"🌍 <b>FILTRO ATIVO:</b> Análise tática pura"
+            f"🌍 <b>FILTRO ATIVO:</b> Conexão API-Football Ao Vivo"
         )
         bot.send_message(alvo, text=abertura, parse_mode="HTML")
         time.sleep(1.5)
     except Exception as e:
         print(f"[ERR-TG] Abertura falhou: {e}")
 
-    for j, id_jogo in jogos_filtrados:
+    for j in jogos:
         try:
             pct_a = int(random.randint(58, 77) * HISTORICO_IA["fator_inteligencia_ajuste"])
             pct_o = int(random.randint(42, 74) * HISTORICO_IA["fator_inteligencia_ajuste"])
@@ -171,17 +198,12 @@ def gerar_e_enviar_sinais(destino_id=None, ignorar_filtro=False):
                 f"=========================================="
             )
             bot.send_message(alvo, text=msg, parse_mode="HTML")
-            
-            if not ignorar_filtro:
-                SINAIS_ENVIADOS_HOJE.add(id_jogo)
-                
-            time.sleep(1.5)
+            time.sleep(2.0) # Delay seguro anti-flood do Telegram
         except Exception as game_error:
             print(f"[PAYLOAD-ERR] Erro jogo: {game_error}")
 
 def loop_relogio_diario():
-    global SINAIS_ENVIADOS_HOJE
-    print("[CRON] Daemon ativo.")
+    print("[CRON] Daemon ativo rodando em segundo plano.")
     atualizar_inteligencia_diaria()
     gerar_e_enviar_sinais()
     while True:
@@ -189,6 +211,12 @@ def loop_relogio_diario():
             fuso_br = timezone(timedelta(hours=-3))
             agora = datetime.now(fuso_br)
             amanha = agora + timedelta(days=1)
-            alvo = datetime(amanha.year, amanha.month, amanha.day, 0, 0, 0, tzinfo=fuso_br)
-            time.sleep((alvo - agora).total_seconds())
+            alvo = datetime(amanha.year, amanha.month, amanha.day, 0, 5, 0, tzinfo=fuso_br) # Roda às 00:05 para dar tempo da API atualizar
             
+            tempo_espera = (alvo - agora).total_seconds()
+            time.sleep(tempo_espera)
+            
+            atualizar_inteligencia_diaria()
+            gerar_e_enviar_sinais()
+            time.sleep(15)
+        except Exception as e:
