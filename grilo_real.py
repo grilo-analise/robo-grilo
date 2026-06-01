@@ -15,14 +15,14 @@ sys.stdout.reconfigure(line_buffering=True)
 TOKEN = os.environ.get('TELEGRAM_TOKEN', '').strip()
 CHAT_ID = os.environ.get('CHAT_SINAIS_ID', '').strip()
 
-# Inicialização segura: deleta webhooks antigos para evitar o Erro 409
+# Reseta conexões antigas para evitar o erro 409 de conflito de bot
 if TOKEN:
     try:
         temp_bot = telebot.TeleBot(TOKEN)
         temp_bot.delete_webhook(drop_pending_updates=True)
-        print("[HACK-NET] Instâncias antigas limpas com sucesso.")
+        print("[SYS-NET] Instâncias antigas limpas.")
     except Exception as e:
-        print(f"[HACK-NET] Erro ao limpar conexões pendentes: {e}")
+        print(f"[SYS-NET] Erro ao limpar webhook: {e}")
 
 bot = telebot.TeleBot(TOKEN) if TOKEN else None
 app = Flask(__name__)
@@ -57,7 +57,7 @@ def puxar_jogos_do_dia_reais():
     try:
         resposta = requests.get(url, timeout=12)
         if resposta.status_code == 200:
-            dados = response_data = resposta.json()
+            dados = resposta.json()
             jogos_reais = []
             
             for partida in dados:
@@ -68,14 +68,14 @@ def puxar_jogos_do_dia_reais():
                 if not time_casa or not time_fora:
                     continue
                     
-                # Extração segura e tática do horário para evitar quebras de string
+                # Tratamento de horário corrigido de forma definitiva
                 horario_str = "16:00"
-                match_date_raw = partida.get("matchDateTime")
+                match_date_raw = partida.get("matchDateTime") # Formato: "2026-06-01T18:00:00"
                 if match_date_raw and "T" in match_date_raw:
                     try:
-                        # Pega a parte após o 'T' e extrai os primeiros 5 caracteres (HH:MM)
-                        tempo_limpo = match_date_raw.split("T")[1]
-                        horario_str = tempo_limpo[:5]
+                        # Pega a parte do horário "18:00:00" e filtra apenas as horas e minutos "18:00"
+                        hora_completa = match_date_raw.split("T")[1]
+                        horario_str = hora_completa[:5]
                     except Exception:
                         horario_str = "16:00"
 
@@ -96,18 +96,19 @@ def puxar_jogos_do_dia_reais():
                 jogos_reais.append(jogo_formatado)
                 
             if jogos_reais:
-                print(f"[API] {len(jogos_reais)} partidas globais carregadas para hoje.")
-                # Coleta uma amostra de até 6 jogos do catálogo mundial
+                print(f"[API] {len(jogos_reais)} partidas reais encontradas no mundo.")
+                # Envia no máximo 6 partidas aleatórias para preencher o boletim diário sem floodar
                 return random.sample(jogos_reais, min(len(jogos_reais), 6))
                 
     except Exception as e:
-        print(f"[ERR-API] Falha ao ler catálogo global: {e}")
+        print(f"[ERR-API] Falha ao ler catálogo: {e}")
         
+    # Retorno de segurança limpo caso ocorra instabilidade externa
     return [
         {
-            "liga_nome": "Filtro de Cobertura Mundial", 
+            "liga_nome": "Filtro de Cobertura Global", 
             "pais": "MUNDO", 
-            "time_casa": "Buscando novas ligas", 
+            "time_casa": "Buscando novos jogos", 
             "time_fora": "no banco de dados", 
             "horario": hoje_br.strftime('%H:%M'), 
             "zebra_detectada": False, 
@@ -162,7 +163,7 @@ def gerar_e_enviar_sinais(destino_id=None):
             esc = round(random.uniform(8.8, 11.8), 1)
             tot_c = round(j["casa_amarelos_med"] + j["fora_amarelos_med"], 1)
             cmd_sug = "🚨 <b>ALTA PROBABILIDADE DE ZEBRA!</b> 🔥\nHandicap (+) visitante ou dupla chance." if j["zebra_detectada"] else "🔥 ENTRADA DE VALOR: Gols Asiáticos pré-live."
-            cmd_ind = "✅ Entrada baseada em quebra de padrão tático." if j["zebra_detectada"] else "Analisar comportamento tático nos primeiros 15 minutos in Live."
+            cmd_ind = "✅ Entrada baseada em quebra de padrão tático." if j["zebra_detectada"] else "Analisar comportamento tático nos primeiros 15 minutos em Live."
             msg = (
                 f"⚔️ <b>PARTIDA:</b> <b>{j['time_casa']}</b> x <b>{j['time_fora']}</b>\n"
                 f"📆 <b>DATA DO JOGO:</b> {data_header} às {j['horario']}\n"
@@ -214,4 +215,3 @@ def escutar_comandos_telegram():
         return
     @bot.message_handler(commands=['hoje', 'sinais'])
     def demand_reply(message):
-        bot.reply_to(message, "⏳ <i>Compilando metricas do servidor...</i>", parse_mode="HTML")
