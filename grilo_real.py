@@ -162,6 +162,7 @@ def gerar_e_enviar_sinais(destino_id=None):
         time.sleep(1.5)
     except Exception as e:
         print(f"[ERR-TG] Abertura falhou: {e}")
+        
     for j in jogos:
         try:
             pct_a = int(random.randint(58, 77) * HISTORICO_IA["fator_inteligencia_ajuste"])
@@ -176,6 +177,7 @@ def gerar_e_enviar_sinais(destino_id=None):
             tot_c = round(j["casa_amarelos_med"] + j["fora_amarelos_med"], 1)
             cmd_sug = "🚨 <b>ALTA PROBABILIDADE DE ZEBRA!</b> 🔥\nHandicap (+) visitante ou dupla chance." if j["zebra_detectada"] else "🔥 ENTRADA DE VALOR: Gols Asiáticos pré-live."
             cmd_ind = "✅ Entrada baseada em quebra de padrão tático." if j["zebra_detectada"] else "Analisar comportamento tático nos primeiros 15 minutos em Live."
+            
             msg = (
                 f"⚔️ <b>PARTIDA:</b> <b>{j['time_casa']}</b> x <b>{j['time_fora']}</b>\n"
                 f"📆 <b>DATA DO JOGO:</b> {data_header} às {j['horario']}\n"
@@ -199,4 +201,3 @@ def gerar_e_enviar_sinais(destino_id=None):
                 f"💡 <b>Indicação:</b> {cmd_ind}\n"
                 f"=========================================="
             )
-            bot.send_message(alvo, text=msg, parse_mode="HTML")
