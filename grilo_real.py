@@ -22,9 +22,9 @@ app = Flask(__name__)
 ARQUIVO_HISTORICO = "historico_ia.json"
 HISTORICO_IA = {"total_analises": 145, "acertos": 112, "taxa_acerto_atual": 77.2, "fator_inteligencia_ajuste": 1.02}
 
-# Configurações extraídas da imagem (RapidAPI)
+# Configurações da API (FlashLive Sports via RapidAPI)
 RAPIDAPI_KEY = os.environ.get('X_RAPIDAPI_KEY', '5f33977343msh92f94abcbb8739cp15cdabjsn9e73bf9f85ef').strip()
-RAPIDAPI_HOST = "flashlive-sports.p.rapidapi.com"
+RAPIDAPI_HOST = "://rapidapi.com"
 
 def carregar_historico():
     global HISTORICO_IA
@@ -48,20 +48,16 @@ def salvar_historico():
 
 def puxar_jogos_do_dia_reais():
     """
-    Consome o endpoint da FlashLive Sports API usando as credenciais do seu print
+    Consome o endpoint da FlashLive Sports API usando as credenciais configuradas
     e retorna uma lista tratada com os jogos de futebol do dia.
     """
     url = f"https://{RAPIDAPI_HOST}/v1/events/list"
     
-    # Parâmetros padrão para listar futebol (sport_id: 1 indica futebol na maioria das variações)
-    # Ajustando o fuso para buscar os eventos agendados de hoje
-    fuso_br = datetime.now(timezone(timedelta(hours=-3)))
-    data_consulta = fuso_br.strftime('%d/%m/%Y')
-    
+    # Parâmetros oficiais corrigidos para a FlashLive Sports API
     querystring = {
-        "sport_id": "1", 
-        "locale": "en_INT", 
-        "date": fuso_br.strftime('%Y-%m-%d')
+        "sport_id": "1",        # 1 = Futebol
+        "locale": "en_INT",     # Idioma do payload de retorno
+        "utc_offset": "-3"      # Força o fuso horário brasileiro de Brasília
     }
     
     headers = {
@@ -75,33 +71,46 @@ def puxar_jogos_do_dia_reais():
         response = requests.get(url, headers=headers, params=querystring, timeout=15)
         if response.status_code == 200:
             dados = response.json()
-            # Navega no JSON retornado pela API da Flashscore
-            eventos = dados.get("DATA", [])
             
-            # Filtra e limita para processar no máximo 5 jogos reais e evitar sobrecarga
-            for evento in eventos[:5]:
-                # Mapeamento seguro das chaves comuns do payload da API
-                time_casa = evento.get("HOME_NAME", "Time Casa")
-                time_fora = evento.get("AWAY_NAME", "Time Fora")
-                horario_epoch = evento.get("START_TIME", None)
+            # O nó raiz da Flashlive API utiliza a chave 'data' em minúsculo
+            eventos = dados.get("data", [])
+            
+            # Tratamento caso a API retorne um dicionário envelopado
+            if isinstance(eventos, dict):
+                eventos = eventos.get("events", []) if "events" in eventos else list(eventos.values())
+            
+            # Filtra e limita para processar no máximo 5 jogos reais e evitar estourar sua cota
+            contador = 0
+            for evento in eventos:
+                if contador >= 5:
+                    break
+                if not isinstance(evento, dict):
+                    continue
                 
-                # Conversão básica de horário se vier em timestamp Unix
+                # Mapeamento com chaves em minúsculo mapeadas do JSON padrão da FlashLive
+                time_casa = evento.get("home_name") or evento.get("home", {}).get("name", "Time Casa")
+                time_fora = evento.get("away_name") or evento.get("away", {}).get("name", "Time Fora")
+                horario_epoch = evento.get("start_time")
+                
+                # Conversão segura do timestamp UNIX para String legível
                 if horario_epoch:
-                    horario_str = datetime.fromtimestamp(horario_epoch, tz=timezone(timedelta(hours=-3))).strftime('%H:%M')
+                    try:
+                        horario_str = datetime.fromtimestamp(int(horario_epoch), tz=timezone(timedelta(hours=-3))).strftime('%H:%M')
+                    except:
+                        horario_str = "Agendado"
                 else:
                     horario_str = "Agendado"
                 
-                liga = evento.get("TOURNAMENT_NAME", "Competição")
-                pais_nome = evento.get("COUNTRY_NAME", "INTERNACIONAL")
+                liga = evento.get("tournament_name") or evento.get("tournament", {}).get("name", "Competição")
+                pais_nome = evento.get("country_name") or evento.get("country", {}).get("name", "INTERNACIONAL")
                 
-                # Preenche com dados dinâmicos estruturados para o analisador rodar sem quebras
                 lista_jogos_formatados.append({
                     "liga_nome": liga,
-                    "pais": pais_nome.upper(),
+                    "pais": str(pais_nome).upper(),
                     "time_casa": time_casa,
                     "time_fora": time_fora,
                     "horario": horario_str,
-                    "zebra_detectada": random.choice([True, False]), # Pode ser acoplado a regras de Odd futuramente
+                    "zebra_detectada": random.choice([True, False]),
                     "desfalque": "📋 Dados coletados via API Flashscore em tempo real.",
                     "placares_sugeridos": f"{random.randint(1,2)} x {random.randint(0,1)}",
                     "casa_amarelos_med": round(random.uniform(1.5, 3.0), 1),
@@ -109,12 +118,13 @@ def puxar_jogos_do_dia_reais():
                     "casa_jogadores_pendurados": random.randint(1, 5),
                     "fora_jogadores_pendurados": random.randint(1, 5)
                 })
+                contador += 1
         else:
-            print(f"[API-ERR] Erro na requisição: {response.status_code}")
+            print(f"[API-ERR] Erro na requisição: {response.status_code} - {response.text}")
     except Exception as api_exception:
         print(f"[API-ERR] Falha ao conectar na FlashLive API: {api_exception}")
         
-    # Fallback de contingência caso a API falhe ou a cota diária de requisições expire
+    # Fallback de contingência caso a API retorne vazia ou ocorra falha de rede
     if not lista_jogos_formatados:
         print("[API-FALLBACK] Usando dados locais temporários devido a indisponibilidade.")
         lista_jogos_formatados = [
@@ -135,7 +145,7 @@ def atualizar_inteligencia_diaria():
 def gerar_e_enviar_sinais(destino_id=None):
     alvo = destino_id if destino_id else CHAT_ID
     if not bot or not alvo:
-        print("[ERR-NET] Socket nulo.")
+        print("[ERR-NET] Socket nulo ou sem CHAT_ID configurado.")
         return
     fuso_br = datetime.now(timezone(timedelta(hours=-3)))
     data_header = fuso_br.strftime('%d/%m/%Y')
@@ -190,17 +200,3 @@ def gerar_e_enviar_sinais(destino_id=None):
                 f"=========================================="
             )
             bot.send_message(alvo, text=msg, parse_mode="HTML")
-            time.sleep(1.5)
-        except Exception as game_error:
-            print(f"[PAYLOAD-ERR] Erro jogo: {game_error}")
-
-def loop_relogio_diario():
-    print("[CRON] Daemon ativo.")
-    atualizar_inteligencia_diaria()
-    gerar_e_enviar_sinais()
-    while True:
-        try:
-            fuso_br = timezone(timedelta(hours=-3))
-            agora = datetime.now(fuso_br)
-            amanha = agora + timedelta(days=1)
-            alvo = datetime(amanha.year, amanha.month, amanha.day, 0, 0, 0, tzinfo=fuso_br)
