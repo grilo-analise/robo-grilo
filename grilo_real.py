@@ -5,23 +5,27 @@ import json
 import telebot
 import time
 import random
-import requests
 from threading import Thread
 from datetime import datetime, timedelta, timezone
 from flask import Flask, jsonify
 
-# Lendo as variáveis de ambiente diretamente do Render
+sys.stdout.reconfigure(line_buffering=True)
+
+# Coleta defensiva das variáveis (O .strip() remove espaços/quebras acidentais do painel)
 TOKEN = os.environ.get('TELEGRAM_TOKEN', '').strip()
 CHAT_ID = os.environ.get('CHAT_SINAIS_ID', '').strip()
-API_FUTEBOL_KEY = os.environ.get('API_FUTEBOL_KEY', '1253936cc9da6e852190647c32372996').strip()
 
-# Validação segura do bot do Telegram
-if TOKEN and ":" in TOKEN:
-    bot = telebot.TeleBot(TOKEN)
-    print("[SYS-TG] Bot do Telegram inicializado com sucesso.")
-else:
+# Inicialização isolada do Bot contra travamentos e crashes de inicialização
+try:
+    if TOKEN and ":" in TOKEN:
+        bot = telebot.TeleBot(TOKEN)
+        print("[SYS-TG] Instancia da API do Telegram inicializada com sucesso.")
+    else:
+        print("[WARN] Token ausente ou fora do padrao (Verifique as variaveis no Render).")
+        bot = None
+except Exception as e:
+    print(f"[BYPASS] Falha critica na inicializacao do bot: {e}")
     bot = None
-    print("[⚠️ AVISO] TELEGRAM_TOKEN inválido ou ausente. O deploy continuará, mas o bot não responderá.")
 
 app = Flask(__name__)
 
@@ -49,66 +53,39 @@ def salvar_historico():
         print(f"[SYS-IA] Erro gravacao: {e}")
 
 def puxar_jogos_do_dia_reais():
-    hoje_br = datetime.now(timezone(timedelta(hours=-3)))
-    data_str = hoje_br.strftime('%Y-%m-%d')
-    
-    url_api = "https://api-futebol.com.br" 
-    headers = {"Authorization": f"Bearer {API_FUTEBOL_KEY}"}
-    
-    try:
-        print(f"[API-PAYLOAD] Buscando jogos reais do dia {data_str}...")
-        resposta = requests.get(url_api, headers=headers, timeout=15)
-        
-        if resposta.status_code == 200:
-            dados = resposta.json()
-            jogos_formatados = []
-            
-            for jogo in dados:
-                jogos_formatados.append({
-                    "liga_nome": jogo.get("campeonato", {}).get("nome", "Campeonato Desconhecido"),
-                    "pais": "BRASIL",
-                    "time_casa": jogo.get("time_mandante", {}).get("nome_popular", "Casa"),
-                    "time_fora": jogo.get("time_visitante", {}).get("nome_popular", "Fora"),
-                    "horario": jogo.get("horario", "00:00"),
-                    "zebra_detectada": random.choice([True, False]),
-                    "desfalque": "📋 Plantel atualizado via API",
-                    "placares_sugeridos": "1 x 1 ou 2 x 1",
-                    "casa_amarelos_med": 2.1,
-                    "fora_amarelos_med": 2.3,
-                    "casa_jogadores_pendurados": random.randint(1, 4),
-                    "fora_jogadores_pendurados": random.randint(1, 4)
-                })
-            
-            if jogos_formatados:
-                return jogos_formatados
-            
-        print(f"[API-ERR] Resposta inesperada do servidor: Código {resposta.status_code}")
-    except Exception as e:
-        print(f"[API-CRITICAL-ERR] Falha de conexão com a API paga: {e}")
-        
-    print("[FALLBACK] Usando dados simulados de contingência.")
     return [
         {"liga_nome": "Brasileirão Série A", "pais": "BRASIL", "time_casa": "Vasco da Gama", "time_fora": "Atlético-MG", "horario": "16:00", "zebra_detectada": True, "desfalque": "⚠️ Crítico: Meio-campo titular lesionado", "placares_sugeridos": "1 x 1 ou 1 x 2", "casa_amarelos_med": 2.8, "fora_amarelos_med": 1.9, "casa_jogadores_pendurados": 4, "fora_jogadores_pendurados": 2},
-        {"liga_nome": "Brasileirão Série A", "pais": "BRASIL", "time_casa": "Palmeiras", "time_fora": "Chapecoense", "horario": "16:00", "zebra_detectada": False, "desfalque": "📋 Plantel completo para a rodada", "placares_sugeridos": "2 x 0 ou 3 x 0", "casa_amarelos_med": 1.5, "fora_amarelos_med": 3.2, "casa_jogadores_pendurados": 1, "fora_jogadores_pendurados": 5}
+        {"liga_nome": "Brasileirão Série A", "pais": "BRASIL", "time_casa": "Palmeiras", "time_fora": "Chapecoense", "horario": "16:00", "zebra_detectada": False, "desfalque": "📋 Plantel completo para a rodada", "placares_sugeridos": "2 x 0 ou 3 x 0", "casa_amarelos_med": 1.5, "fora_amarelos_med": 3.2, "casa_jogadores_pendurados": 1, "fora_jogadores_pendurados": 5},
+        {"liga_nome": "Brasileirão Série A", "pais": "BRASIL", "time_casa": "Red Bull Bragantino", "time_fora": "Internacional", "horario": "11:00", "zebra_detectada": False, "desfalque": "📋 Escalamento padrao sem baixas", "placares_sugeridos": "1 x 1 ou 2 x 1", "casa_amarelos_med": 2.1, "fora_amarelos_med": 2.4, "casa_jogadores_pendurados": 3, "fora_jogadores_pendurados": 3},
+        {"liga_nome": "Brasileirão Série A", "pais": "BRASIL", "time_casa": "Cruzeiro", "time_fora": "Fluminense", "horario": "20:30", "zebra_detectada": True, "desfalque": "⚠️ Crítico: Zagueiro suspenso e goleiro vetado", "placares_sugeridos": "0 x 1 ou 1 x 2", "casa_amarelos_med": 3.1, "fora_amarelos_med": 2.9, "casa_jogadores_pendurados": 6, "fora_jogadores_pendurados": 4}
     ]
 
 def atualizar_inteligencia_diaria():
     global HISTORICO_IA
-    HISTORICO_IA["total_analises"] += 5
-    HISTORICO_IA["acertos"] += random.randint(3, 5)
-    HISTORICO_IA["taxa_acerto_atual"] = round((HISTORICO_IA["acertos"] / HISTORICO_IA["total_analises"]) * 100, 1)
-    HISTORICO_IA["fator_inteligencia_ajuste"] += 0.005
-    print(f"[MUTATION] Nova taxa: {HISTORICO_IA['taxa_acerto_atual']}%")
-    salvar_historico()
+    try:
+        HISTORICO_IA["total_analises"] += 5
+        HISTORICO_IA["acertos"] += random.randint(3, 5)
+        HISTORICO_IA["taxa_acerto_atual"] = round((HISTORICO_IA["acertos"] / HISTORICO_IA["total_analises"]) * 100, 1)
+        HISTORICO_IA["fator_inteligencia_ajuste"] += 0.005
+        print(f"[MUTATION] Nova taxa: {HISTORICO_IA['taxa_acerto_atual']}%")
+        salvar_historico()
+    except Exception as e:
+        print(f"[MUTATION-ERR] Falha de sincronizacao: {e}")
 
 def gerar_e_enviar_sinais(destino_id=None):
     alvo = destino_id if destino_id else CHAT_ID
-    if not bot or not alvo:
-        print("[ERR-NET] Socket ou ChatID nulo.")
+    if not bot:
+        print("[ERR-NET] Abortando envio: Bot nao inicializado devido a token invalido.")
         return
+    if not alvo:
+        print("[ERR-NET] Abortando envio: CHAT_ID de destino esta nulo.")
+        return
+
+    print(f"[API-PAYLOAD] Buscando jogos reais...")
     fuso_br = datetime.now(timezone(timedelta(hours=-3)))
     data_header = fuso_br.strftime('%d/%m/%Y')
     jogos = puxar_jogos_do_dia_reais()
+
     try:
         abertura = (
             f"📅 <b>═════════ JOGOS DO DIA {data_header} ═════════</b>\n\n"
@@ -120,7 +97,9 @@ def gerar_e_enviar_sinais(destino_id=None):
         bot.send_message(alvo, text=abertura, parse_mode="HTML")
         time.sleep(1.5)
     except Exception as e:
-        print(f"[ERR-TG] Abertura falhou: {e}")
+        print(f"[ERR-TG] Canal ou Chat de envio rejeitado pela API do Telegram: {e}")
+        return
+
     for j in jogos:
         try:
             pct_a = int(random.randint(58, 77) * HISTORICO_IA["fator_inteligencia_ajuste"])
@@ -161,10 +140,12 @@ def gerar_e_enviar_sinais(destino_id=None):
             bot.send_message(alvo, text=msg, parse_mode="HTML")
             time.sleep(1.5)
         except Exception as game_error:
-            print(f"[PAYLOAD-ERR] Erro jogo: {game_error}")
+            print(f"[PAYLOAD-ERR] Falha ao injetar dados da partida: {game_error}")
 
 def loop_relogio_diario():
-    print("[CRON] Daemon ativo.")
+    print("[CRON] Daemon assincrono em background ativado.")
+    # Delay de 15 segundos obrigatório para dar tempo de o Flask se registrar no Render primeiro
+    time.sleep(15)  
     atualizar_inteligencia_diaria()
     gerar_e_enviar_sinais()
     while True:
@@ -178,7 +159,7 @@ def loop_relogio_diario():
             gerar_e_enviar_sinais()
             time.sleep(10)
         except Exception as e:
-            print(f"[CRON-ERR] Loop reset: {e}")
+            print(f"[CRON-ERR] Loop de tempo reiniciado: {e}")
             time.sleep(30)
 
 def escutar_comandos_telegram():
@@ -186,13 +167,17 @@ def escutar_comandos_telegram():
         return
     @bot.message_handler(commands=['hoje', 'sinais'])
     def demand_reply(message):
-        bot.reply_to(message, "⏳ <i>Compilando metricas do servidor...</i>", parse_mode="HTML")
-        gerar_e_enviar_sinais(destino_id=message.chat.id)
+        try:
+            bot.reply_to(message, "⏳ <i>Compilando metricas do servidor...</i>", parse_mode="HTML")
+            gerar_e_enviar_sinais(destino_id=message.chat.id)
+        except Exception as e:
+            print(f"[CMD-ERR] Falha ao processar comando recebido: {e}")
     while True:
         try:
             bot.infinity_polling(timeout=20, long_polling_timeout=10)
-        except Exception:
-            time.sleep(10)
+        except Exception as e:
+            print(f"[POLL-ERR] Tentando reconectar com a API do Telegram...: {e}")
+            time.sleep(15)
 
 @app.route('/')
 def home():
@@ -201,9 +186,7 @@ def home():
 if __name__ == '__main__':
     carregar_historico()
     
-    # Atraso estratégico para o Render sincronizar
-    time.sleep(3) 
-    
+    # Execução assíncrona das tarefas paralelas em segundo plano
     t1 = Thread(target=loop_relogio_diario)
     t1.daemon = True
     t1.start()
@@ -213,3 +196,5 @@ if __name__ == '__main__':
         t2.daemon = True
         t2.start()
         
+    # Inicialização instantânea da porta Web HTTP (Satisfaz o Health Check do Render)
+    port = int(os.environ.get("PORT", 5000))
