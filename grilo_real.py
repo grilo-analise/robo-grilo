@@ -5,14 +5,14 @@ import json
 import telebot
 import time
 import random
-import requests  # Adicionado para conectar com a API externa
+import requests
 from threading import Thread
 from datetime import datetime, timedelta, timezone
 from flask import Flask, jsonify
 
 sys.stdout.reconfigure(line_buffering=True)
 
-# Coleta limpa das variáveis de ambiente do painel do Render
+# Coleta das chaves de ambiente ou usa a sua chave direta fornecida
 TOKEN = os.environ.get('TELEGRAM_TOKEN', '').strip()
 CHAT_ID = os.environ.get('CHAT_SINAIS_ID', '').strip()
 API_KEY = os.environ.get('API_SPORTS_KEY', '1253936cc9da6e852190647c32372996').strip()
@@ -44,7 +44,7 @@ def salvar_historico():
         print(f"[SYS-IA] Erro gravacao: {e}")
 
 def obter_estatisticas_time(id_liga, id_time, temporada):
-    """Busca estatísticas reais das equipes para cruzar dados no seu modelo estruturado"""
+    """Busca estatísticas reais das equipes na API-Sports para enriquecer o palpite"""
     url = "https://api-sports.io"
     querystring = {"league": id_liga, "season": temporada, "team": id_time}
     headers = {
@@ -55,27 +55,29 @@ def obter_estatisticas_time(id_liga, id_time, temporada):
         resposta = requests.get(url, headers=headers, params=querystring, timeout=10)
         if resposta.status_code == 200:
             dados = resposta.json().get("response", {})
-            cartoes_dados = dados.get("cards", {}).get("yellow", {})
-            total_amarelos = 0
-            for faixa, info in cartoes_dados.items():
-                if info and info.get("total") is not None:
-                    total_amarelos += info.get("total")
-                    
-            jogos_disputados = dados.get("fixtures", {}).get("played", {}).get("total", 1)
-            if jogos_disputados == 0: jogos_disputados = 1
-            
-            media_cartoes = round(total_amarelos / jogos_disputados, 1)
-            gols_marcados = dados.get("goals", {}).get("for", {}).get("average", {}).get("total", "0.0")
-            
-            return {
-                "media_cartoes": media_cartoes if media_cartoes > 0 else round(random.uniform(1.5, 3.2), 1),
-                "gols_marcar": float(gols_marcados)
-            }
-    except Exception:
-        pass
+            if dados:
+                cartoes_dados = dados.get("cards", {}).get("yellow", {})
+                total_amarelos = 0
+                for faixa, info in cartoes_dados.items():
+                    if info and info.get("total") is not None:
+                        total_amarelos += info.get("total")
+                        
+                jogos_disputados = dados.get("fixtures", {}).get("played", {}).get("total", 1)
+                if jogos_disputados == 0: jogos_disputados = 1
+                
+                media_cartoes = round(total_amarelos / jogos_disputados, 1)
+                gols_marcados = dados.get("goals", {}).get("for", {}).get("average", {}).get("total", "0.0")
+                
+                return {
+                    "media_cartoes": media_cartoes if media_cartoes > 0 else round(random.uniform(1.5, 3.2), 1),
+                    "gols_marcar": float(gols_marcados) if gols_marcados else 1.2
+                }
+    except Exception as e:
+        print(f"[API-ERR] Erro estatisticas do time {id_time}: {e}")
     return {"media_cartoes": round(random.uniform(1.5, 3.2), 1), "gols_marcar": 1.2}
 
 def puxar_jogos_do_dia_reais():
+    """Busca a lista de partidas reais agendadas para o dia de hoje"""
     fuso_br = datetime.now(timezone(timedelta(hours=-3)))
     data_hoje = fuso_br.strftime('%Y-%m-%d')
     temporada_atual = fuso_br.year
@@ -112,7 +114,7 @@ def puxar_jogos_do_dia_reais():
                 data_api = fixture_info.get("date", "")
                 horario_br = data_api[11:16] if len(data_api) > 16 else "00:00"
                 
-                # Coleta inteligente de métricas das equipes para alimentar o seu modelo de mensagens
+                # Coleta inteligente de métricas das equipes via API
                 estat_casa = obter_estatisticas_time(id_liga, id_casa, temporada_atual)
                 estat_fora = obter_estatisticas_time(id_liga, id_fora, temporada_atual)
                 
@@ -132,11 +134,11 @@ def puxar_jogos_do_dia_reais():
                 }
                 lista_jogos_formatados.append(jogo)
                 
-                time.sleep(0.3)  # Delay para controle de chamadas
-                if len(lista_jogos_formatados) >= 12:  # Limite técnico de boletins diários por envio
+                time.sleep(0.3)  # Evita sobrecarga de requisições por segundo
+                if len(lista_jogos_formatados) >= 12:  # Limite técnico de boletins diários
                     break
     except Exception as e:
-        print(f"[API-CRITICAL-ERR] Falha ao coletar dados: {e}")
+        print(f"[API-CRITICAL-ERR] Falha ao coletar dados principais: {e}")
         
     return lista_jogos_formatados
 
@@ -152,16 +154,15 @@ def atualizar_inteligencia_diaria():
 def gerar_e_enviar_sinais(destino_id=None):
     alvo = destino_id if destino_id else CHAT_ID
     if not bot or not alvo:
-        print("[ERR-NET] Socket nulo.")
+        print("[ERR-NET] Socket nulo ou CHAT_ID ausente nas configurações.")
         return
+        
     fuso_br = datetime.now(timezone(timedelta(hours=-3)))
     data_header = fuso_br.strftime('%d/%m/%Y')
-    
-    # IMPORTANTE: Agora ele puxa dinamicamente partidas reais no lugar das estáticas
     jogos = puxar_jogos_do_dia_reais()
     
     if not jogos:
-        print("[WARN] Sem partidas disponíveis via API para a data de emissão.")
+        print("[WARN] Nenhuma partida retornada pela API para envio hoje.")
         return
 
     try:
@@ -189,10 +190,8 @@ def gerar_e_enviar_sinais(destino_id=None):
             p_fora = random.randint(350, 480)
             esc = round(random.uniform(8.8, 11.8), 1)
             tot_c = round(j["casa_amarelos_med"] + j["fora_amarelos_med"], 1)
-            
             cmd_sug = "🚨 <b>ALTA PROBABILIDADE DE ZEBRA!</b> 🔥\nHandicap (+) visitante ou dupla chance." if j["zebra_detectada"] else "🔥 ENTRADA DE VALOR: Gols Asiáticos pré-live."
             cmd_ind = "✅ Entrada baseada em quebra de padrão tático." if j["zebra_detectada"] else "Analisar comportamento tático nos primeiros 15 minutos em Live."
-            
             msg = (
                 f"⚔️ <b>PARTIDA:</b> <b>{j['time_casa']}</b> x <b>{j['time_fora']}</b>\n"
                 f"📆 <b>DATA DO JOGO:</b> {data_header} às {j['horario']}\n"
@@ -208,4 +207,3 @@ def gerar_e_enviar_sinais(destino_id=None):
                 f"🚀 Fora ({j['time_fora']}): {j['fora_amarelos_med']}\n"
                 f"📊 <b>ESTIMATIVA TOTAL DO JOGO:</b> {tot_c} cartões\n\n"
                 f"🟨 <b>⚠️ JOGADORES PENDURADOS (RISCO):</b>\n"
-                f"🏠 {j['time_casa']}: <b>{j['casa_jogadores_pendurados']}</b> com amarelo\n"
