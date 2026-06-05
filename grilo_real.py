@@ -49,7 +49,7 @@ def salvar_historico():
         print(f"[SYS-IA] Erro gravacao: {e}")
 
 def puxar_jogos_do_dia_reais():
-    """Consome a API Futebol trazendo todas as partidas e ligas disponíveis ao vivo"""
+    """Consome o endpoint de partidas diárias da API Futebol de forma compatível com planos básicos"""
     url = "https://api-futebol.com.br"
     headers = {"Authorization": f"Bearer {API_FUTEBOL_KEY}"}
     
@@ -61,17 +61,17 @@ def puxar_jogos_do_dia_reais():
             try:
                 partidas = response.json()
             except ValueError:
-                print(f"[API-ERR] Resposta HTTP 200, mas nao e um JSON valido. Erro no formato.")
-                print(f"[API-TEXTO-RECEBIDO] {response.text[:250]}")
+                print(f"[API-ERR] Resposta HTTP 200, mas nao e um JSON valido. Bloqueio de rota Cloudflare.")
+                print(f"[API-TEXTO-RECEBIDO] {response.text[:200]}")
                 return []
 
             for partida in partidas:
                 campeonato_dados = partida.get("campeonato", {})
-                nome_liga = campeonato_dados.get("nome", "Campeonato Alternativo")
+                nome_liga = campeonato_dados.get("nome", "Campeonato Geral")
                 regiao = campeonato_dados.get("regiao", "BRASIL").upper()
                 
                 placar_atual = partida.get("placar", "0x0")
-                status_tempo = partida.get("status_marcador", "Em andamento")
+                status_tempo = partida.get("status", "Agendado")
                 
                 zebra = random.choice([True, False])
                 
@@ -82,8 +82,8 @@ def puxar_jogos_do_dia_reais():
                     "time_fora": partida.get("time_fora", {}).get("nome_popular", "Time Fora"),
                     "horario": status_tempo, 
                     "zebra_detectada": zebra,
-                    "desfalque": f"📋 Placar Live: {placar_atual}",
-                    "placares_sugeridos": "Acompanhar Tendência em Tempo Real",
+                    "desfalque": f"📋 Status/Placar: {placar_atual}",
+                    "placares_sugeridos": "Análise pré-live / acompanhamento",
                     "casa_amarelos_med": round(random.uniform(1.5, 3.8), 1),
                     "fora_amarelos_med": round(random.uniform(1.5, 3.8), 1),
                     "casa_jogadores_pendurados": random.randint(1, 6),
@@ -118,7 +118,7 @@ def gerar_e_enviar_sinais(destino_id=None):
     jogos = puxar_jogos_do_dia_reais()
     
     if not jogos:
-        print("[AVISO] Nenhum jogo ao vivo encontrado ou falha na comunicacao com a API.")
+        print("[AVISO] Nenhum jogo encontrado para processar no momento.")
         return
 
     with historico_lock:
@@ -202,12 +202,19 @@ def escutar_comandos_telegram():
     @bot.message_handler(commands=['hoje', 'sinais'])
     def demand_reply(message):
         try:
-            bot.reply_to(message, "⏳ <i>Varrendo todas as ligas ao vivo na API...</i>", parse_mode="HTML")
+            bot.reply_to(message, "⏳ <i>Varrendo todas as ligas na API...</i>", parse_mode="HTML")
             gerar_e_enviar_sinais(destino_id=message.chat.id)
         except Exception as e:
             print(f"[ERR-CMD] Falha no comando: {e}")
             
-    print("[TG-BOT] Servidor de escuta ativo.")
+    print("[TG-BOT] Forçando limpeza de conexões antigas...")
+    try:
+        bot.delete_webhook(drop_pending_updates=True)
+        time.sleep(1)
+    except Exception as e:
+        print(f"[TG-BOT] Erro ao deletar webhook: {e}")
+
+    print("[TG-BOT] Servidor de escuta ativo com sucesso.")
     bot.infinity_polling(timeout=20, long_polling_timeout=10)
 
 @app.route('/')
