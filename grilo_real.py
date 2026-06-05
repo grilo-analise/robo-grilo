@@ -10,8 +10,6 @@ from threading import Thread
 from datetime import datetime, timedelta, timezone
 from flask import Flask, jsonify
 
-# REMOVIDO: sys.stdout.reconfigure que estava travando o buffer de log do Render
-
 # Lendo as variáveis de ambiente diretamente do Render
 TOKEN = os.environ.get('TELEGRAM_TOKEN', '').strip()
 CHAT_ID = os.environ.get('CHAT_SINAIS_ID', '').strip()
@@ -141,7 +139,7 @@ def gerar_e_enviar_sinais(destino_id=None):
                 f"⚔️ <b>PARTIDA:</b> <b>{j['time_casa']}</b> x <b>{j['time_fora']}</b>\n"
                 f"📆 <b>DATA DO JOGO:</b> {data_header} às {j['horario']}\n"
                 f"⚽ <b>COMPETIÇÃO:</b> {j['pais']} - {j['liga_nome']}\n"
-                f"📈 Vantagem tática calculada através della rede neural com base no retrospecto\n\n"
+                f"📈 Vantagem tática calculada através da rede neural com base no retrospecto\n\n"
                 f"📊 <b>AMBAS MARCAM:</b> {pct_a}% | 📈 <b>+2.5 GOLS:</b> {pct_o}%\n"
                 f"🎯 <b>MÉDIA CHUTES NO GOL:</b> Casa: {c_casa} | Fora: {c_fora}\n"
                 f"🔄 <b>PASSES ESTIMADOS:</b> Casa: {p_casa} | Fora: {p_fora}\n"
@@ -203,10 +201,15 @@ def home():
 if __name__ == '__main__':
     carregar_historico()
     
-    # Adicionado um pequeno atraso para dar estabilidade no Render antes de iniciar as Threads
+    # Atraso estratégico para o Render sincronizar
     time.sleep(3) 
     
     t1 = Thread(target=loop_relogio_diario)
     t1.daemon = True
     t1.start()
+    
     if bot:
+        t2 = Thread(target=escutar_comandos_telegram)
+        t2.daemon = True
+        t2.start()
+        
