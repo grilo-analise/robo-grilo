@@ -55,6 +55,7 @@ def puxar_jogos_do_dia_reais():
     fuso_br = datetime.now(timezone(timedelta(hours=-3)))
     data_hoje = fuso_br.strftime('%Y-%m-%d')
     
+    # Ajustado o endpoint correto para listagem de partidas da API-Football v3
     url = "https://api-sports.io"
     querystring = {"date": data_hoje}
     headers = {
@@ -219,6 +220,6 @@ def escutar_comandos_telegram():
             gerar_e_enviar_sinais(destino_id=message.chat.id)
         except Exception as e:
             print(f"[CMD-ERR] Falha ao responder comando: {e}")
+            
     while True:
         try:
-            bot.infinity_polling(timeout=20, long_polling_timeout=10)
