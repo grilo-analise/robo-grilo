@@ -56,21 +56,23 @@ def puxar_jogos_do_dia_reais():
     lista_formatada = []
     try:
         response = requests.get(url, headers=headers, timeout=15)
+        
         if response.status_code == 200:
-            partidas = response.json()
-            
+            try:
+                partidas = response.json()
+            except ValueError:
+                print(f"[API-ERR] Resposta HTTP 200, mas nao e um JSON valido. Erro no formato.")
+                print(f"[API-TEXTO-RECEBIDO] {response.text[:250]}")
+                return []
+
             for partida in partidas:
-                # Extração dinâmica dos dados de campeonato fornecidos pela API
                 campeonato_dados = partida.get("campeonato", {})
                 nome_liga = campeonato_dados.get("nome", "Campeonato Alternativo")
-                
-                # Trata o escopo/região (Se não houver região, define como INTERNACIONAL ou BRASIL)
                 regiao = campeonato_dados.get("regiao", "BRASIL").upper()
                 
                 placar_atual = partida.get("placar", "0x0")
                 status_tempo = partida.get("status_marcador", "Em andamento")
                 
-                # Detecção lógica de zebra baseada no status do placar ou aleatorização controlada
                 zebra = random.choice([True, False])
                 
                 item = {
@@ -89,7 +91,7 @@ def puxar_jogos_do_dia_reais():
                 }
                 lista_formatada.append(item)
         else:
-            print(f"[API-ERR] Erro resposta API: Status {response.status_code}")
+            print(f"[API-ERR] Erro resposta API: Status {response.status_code}. Detalhes: {response.text[:250]}")
     except Exception as e:
         print(f"[API-ERR] Erro ao conectar na API: {e}")
         
@@ -116,7 +118,7 @@ def gerar_e_enviar_sinais(destino_id=None):
     jogos = puxar_jogos_do_dia_reais()
     
     if not jogos:
-        print("[AVISO] Nenhum jogo ao vivo encontrado em nenhuma liga neste momento.")
+        print("[AVISO] Nenhum jogo ao vivo encontrado ou falha na comunicacao com a API.")
         return
 
     with historico_lock:
