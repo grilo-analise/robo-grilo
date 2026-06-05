@@ -215,5 +215,3 @@ def gerar_e_enviar_sinais(destino_id=None):
 
 def loop_relogio_diario():
     print("[CRON] Temporizador de 1 hora ativo em segundo plano.")
-    atualizar_inteligencia_diaria()
-    gerar_e_enviar_sinais()
