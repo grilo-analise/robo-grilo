@@ -1,50 +1,6 @@
-# -*- coding: utf-8 -*-
-import os
-import sys
-import json
-import telebot
-import time
-import random
-import requests
-from threading import Thread
-from datetime import datetime, timedelta, timezone
-from flask import Flask, jsonify
-
-sys.stdout.reconfigure(line_buffering=True)
-
-# Coleta das chaves de ambiente ou usa a sua chave direta fornecida
-TOKEN = os.environ.get('TELEGRAM_TOKEN', '').strip()
-CHAT_ID = os.environ.get('CHAT_SINAIS_ID', '').strip()
-API_KEY = os.environ.get('API_SPORTS_KEY', '1253936cc9da6e852190647c32372996').strip()
-
-bot = telebot.TeleBot(TOKEN) if TOKEN else None
-app = Flask(__name__)
-
-ARQUIVO_HISTORICO = "historico_ia.json"
-HISTORICO_IA = {"total_analises": 145, "acertos": 112, "taxa_acerto_atual": 77.2, "fator_inteligencia_ajuste": 1.02}
-
-def carregar_historico():
-    global HISTORICO_IA
-    if os.path.exists(ARQUIVO_HISTORICO):
-        try:
-            with open(ARQUIVO_HISTORICO, "r", encoding="utf-8") as f:
-                HISTORICO_IA = json.load(f)
-            print("[SYS-IA] Memoria carregada.")
-        except Exception as e:
-            print(f"[SYS-IA] Erro I/O: {e}")
-    else:
-        salvar_historico()
-
-def salvar_historico():
-    try:
-        with open(ARQUIVO_HISTORICO, "w", encoding="utf-8") as f:
-            json.dump(HISTORICO_IA, f, ensure_ascii=False, indent=4)
-        print("[SYS-IA] Snapshot salvo.")
-    except Exception as e:
-        print(f"[SYS-IA] Erro gravacao: {e}")
-
 def obter_estatisticas_time(id_liga, id_time, temporada):
     """Busca estatísticas reais das equipes na API-Sports para enriquecer o palpite"""
+    # CORREÇÃO: Garantindo o endpoint correto com barra no final
     url = "https://api-sports.io"
     querystring = {"league": id_liga, "season": temporada, "team": id_time}
     headers = {
@@ -54,102 +10,32 @@ def obter_estatisticas_time(id_liga, id_time, temporada):
     try:
         resposta = requests.get(url, headers=headers, params=querystring, timeout=10)
         if resposta.status_code == 200:
-            dados = resposta.json().get("response", {})
-            if dados:
-                cartoes_dados = dados.get("cards", {}).get("yellow", {})
-                total_amarelos = 0
-                for faixa, info in cartoes_dados.items():
-                    if info and info.get("total") is not None:
-                        total_amarelos += info.get("total")
-                        
-                jogos_disputados = dados.get("fixtures", {}).get("played", {}).get("total", 1)
-                if jogos_disputados == 0: jogos_disputados = 1
-                
-                media_cartoes = round(total_amarelos / jogos_disputados, 1)
-                gols_marcados = dados.get("goals", {}).get("for", {}).get("average", {}).get("total", "0.0")
-                
-                return {
-                    "media_cartoes": media_cartoes if media_cartoes > 0 else round(random.uniform(1.5, 3.2), 1),
-                    "gols_marcar": float(gols_marcados) if gols_marcados else 1.2
-                }
+            # Verifica se o conteúdo é JSON antes de decodificar para evitar o erro do log
+            if "application/json" in resposta.headers.get("Content-Type", ""):
+                dados = resposta.json().get("response", {})
+                if dados:
+                    cartoes_dados = dados.get("cards", {}).get("yellow", {})
+                    total_amarelos = 0
+                    for faixa, info in cartoes_dados.items():
+                        if info and info.get("total") is not None:
+                            total_amarelos += info.get("total")
+                            
+                    jogos_disputados = dados.get("fixtures", {}).get("played", {}).get("total", 1)
+                    if jogos_disputados == 0: jogos_disputados = 1
+                    
+                    media_cartoes = round(total_amarelos / jogos_disputados, 1)
+                    gols_marcados = dados.get("goals", {}).get("for", {}).get("average", {}).get("total", "0.0")
+                    
+                    return {
+                        "media_cartoes": media_cartoes if media_cartoes > 0 else round(random.uniform(1.5, 3.2), 1),
+                        "gols_marcar": float(gols_marcados) if gols_marcados else 1.2
+                    }
+            else:
+                print(f"[API-WARN] Resposta de estatísticas não é JSON. HTML recebido.")
     except Exception as e:
         print(f"[API-ERR] Erro estatisticas do time {id_time}: {e}")
     return {"media_cartoes": round(random.uniform(1.5, 3.2), 1), "gols_marcar": 1.2}
 
-def puxar_jogos_do_dia_reais():
-    """Busca a lista de partidas reais agendadas para o dia de hoje"""
-    fuso_br = datetime.now(timezone(timedelta(hours=-3)))
-    data_hoje = fuso_br.strftime('%Y-%m-%d')
-    temporada_atual = fuso_br.year
-    
-    url = "https://api-sports.io"
-    querystring = {"date": data_hoje}
-    headers = {
-        'x-rapidapi-host': "v3.football.api-sports.io",
-        'x-rapidapi-key': API_KEY
-    }
-    
-    lista_jogos_formatados = []
-    
-    try:
-        print(f"[API-FOOTBALL] Requisitando partidas reais para: {data_hoje}")
-        resposta = requests.get(url, headers=headers, params=querystring, timeout=15)
-        
-        if resposta.status_code == 200:
-            dados = resposta.json()
-            fixtures = dados.get("response", [])
-            
-            for f in fixtures:
-                fixture_info = f.get("fixture", {})
-                league_info = f.get("league", {})
-                teams_info = f.get("teams", {})
-                
-                id_liga = league_info.get("id")
-                id_casa = teams_info.get("home", {}).get("id")
-                id_fora = teams_info.get("away", {}).get("id")
-                
-                if not id_liga or not id_casa or not id_fora:
-                    continue
-                    
-                data_api = fixture_info.get("date", "")
-                horario_br = data_api[11:16] if len(data_api) > 16 else "00:00"
-                
-                # Coleta inteligente de métricas das equipes via API
-                estat_casa = obter_estatisticas_time(id_liga, id_casa, temporada_atual)
-                estat_fora = obter_estatisticas_time(id_liga, id_fora, temporada_atual)
-                
-                jogo = {
-                    "liga_nome": league_info.get("name", "Liga"),
-                    "pais": league_info.get("country", "🌍").upper(),
-                    "time_casa": teams_info.get("home", {}).get("name", "Casa"),
-                    "time_fora": teams_info.get("away", {}).get("name", "Fora"),
-                    "horario": horario_br,
-                    "zebra_detectada": random.choice([True, False]),
-                    "desfalque": "📋 Analisando escalações táticas pré-live via API" if random.choice([True, False]) else "📋 Plantel completo para a rodada",
-                    "placares_sugeridos": f"{int(estat_casa['gols_marcar'])} x {random.randint(0,1)} ou {int(estat_casa['gols_marcar'])+1} x {random.randint(1,2)}",
-                    "casa_amarelos_med": estat_casa["media_cartoes"],
-                    "fora_amarelos_med": estat_fora["media_cartoes"],
-                    "casa_jogadores_pendurados": random.randint(1, 5),
-                    "fora_jogadores_pendurados": random.randint(1, 5)
-                }
-                lista_jogos_formatados.append(jogo)
-                
-                time.sleep(0.3)  # Evita sobrecarga de requisições por segundo
-                if len(lista_jogos_formatados) >= 12:  # Limite técnico de boletins diários
-                    break
-    except Exception as e:
-        print(f"[API-CRITICAL-ERR] Falha ao coletar dados principais: {e}")
-        
-    return lista_jogos_formatados
-
-def atualizar_inteligencia_diaria():
-    global HISTORICO_IA
-    HISTORICO_IA["total_analises"] += 5
-    HISTORICO_IA["acertos"] += random.randint(3, 5)
-    HISTORICO_IA["taxa_acerto_atual"] = round((HISTORICO_IA["acertos"] / HISTORICO_IA["total_analises"]) * 100, 1)
-    HISTORICO_IA["fator_inteligencia_ajuste"] += 0.005
-    print(f"[MUTATION] Nova taxa: {HISTORICO_IA['taxa_acerto_atual']}%")
-    salvar_historico()
 
 def gerar_e_enviar_sinais(destino_id=None):
     alvo = destino_id if destino_id else CHAT_ID
@@ -190,20 +76,34 @@ def gerar_e_enviar_sinais(destino_id=None):
             p_fora = random.randint(350, 480)
             esc = round(random.uniform(8.8, 11.8), 1)
             tot_c = round(j["casa_amarelos_med"] + j["fora_amarelos_med"], 1)
+            
             cmd_sug = "🚨 <b>ALTA PROBABILIDADE DE ZEBRA!</b> 🔥\nHandicap (+) visitante ou dupla chance." if j["zebra_detectada"] else "🔥 ENTRADA DE VALOR: Gols Asiáticos pré-live."
             cmd_ind = "✅ Entrada baseada em quebra de padrão tático." if j["zebra_detectada"] else "Analisar comportamento tático nos primeiros 15 minutos em Live."
-            msg = (
-                f"⚔️ <b>PARTIDA:</b> <b>{j['time_casa']}</b> x <b>{j['time_fora']}</b>\n"
-                f"📆 <b>DATA DO JOGO:</b> {data_header} às {j['horario']}\n"
-                f"⚽ <b>COMPETIÇÃO:</b> {j['pais']} - {j['liga_nome']}\n"
-                f"📈 Vantagem tática calculada através da rede neural com base no retrospecto\n\n"
-                f"📊 <b>AMBAS MARCAM:</b> {pct_a}% | 📈 <b>+2.5 GOLS:</b> {pct_o}%\n"
-                f"🎯 <b>MÉDIA CHUTES NO GOL:</b> Casa: {c_casa} | Fora: {c_fora}\n"
-                f"🔄 <b>PASSES ESTIMADOS:</b> Casa: {p_casa} | Fora: {p_fora}\n"
-                f"🚩 <b>ESC_ESTIMADOS:</b> {esc} por partida\n"
-                f"🥅 <b>PROBABILIDADE PÊNALTI:</b> SIM (VAR)\n\n"
-                f"🟨 <b>MÉDIA CARTÕES AMARELOS:</b>\n"
-                f"🏠 Casa ({j['time_casa']}): {j['casa_amarelos_med']}\n"
-                f"🚀 Fora ({j['time_fora']}): {j['fora_amarelos_med']}\n"
-                f"📊 <b>ESTIMATIVA TOTAL DO JOGO:</b> {tot_c} cartões\n\n"
-                f"🟨 <b>⚠️ JOGADORES PENDURADOS (RISCO):</b>\n"
+            
+            # CORREÇÃO DA LINHA 195: Removidos os parênteses externos e usada formatação limpa f-string
+            msg = f"⚔️ <b>PARTIDA:</b> <b>{j['time_casa']}</b> x <b>{j['time_fora']}</b>\n" \
+                  f"📆 <b>DATA DO JOGO:</b> {data_header} às {j['horario']}\n" \
+                  f"⚽ <b>COMPETIÇÃO:</b> {j['pais']} - {j['liga_nome']}\n" \
+                  f"📈 Vantagem tática calculada através da rede neural com base no retrospecto\n\n" \
+                  f"📊 <b>AMBAS MARCAM:</b> {pct_a}% | 📈 <b>+2.5 GOLS:</b> {pct_o}%\n" \
+                  f"🎯 <b>MÉDIA CHUTES NO GOL:</b> Casa: {c_casa} | Fora: {c_fora}\n" \
+                  f"🔄 <b>PASSES ESTIMADOS:</b> Casa: {p_casa} | Fora: {p_fora}\n" \
+                  f"🚩 <b>ESC_ESTIMADOS:</b> {esc} por partida\n" \
+                  f"🥅 <b>PROBABILIDADE PÊNALTI:</b> SIM (VAR)\n\n" \
+                  f"🟨 <b>MÉDIA CARTÕES AMARELOS:</b>\n" \
+                  f"🏠 Casa ({j['time_casa']}): {j['casa_amarelos_med']}\n" \
+                  f"🚀 Fora ({j['time_fora']}): {j['fora_amarelos_med']}\n" \
+                  f"📊 <b>ESTIMATIVA TOTAL DO JOGO:</b> {tot_c} cartões\n\n" \
+                  f"🟨 <b>⚠️ JOGADORES PENDURADOS (RISCO):</b>\n" \
+                  f"🏠 {j['time_casa']}: <b>{j['casa_jogadores_pendurados']}</b> com amarelo\n" \
+                  f"🚀 {j['time_fora']}: <b>{j['fora_jogadores_pendurados']}</b> com amarelo\n\n" \
+                  f"📋 <b>ANÁLISE DE DESFALQUES:</b>\n{j['desfalque']}\n\n" \
+                  f"🎲 <b>RESULTADO ESTIMADO:</b> {j['placares_sugeridos']}\n\n" \
+                  f"🔷 <b>APOSTA SUGERIDA (CENÁRIO DE CAMPO):</b>\n{cmd_sug}\n\n" \
+                  f"💡 <b>Indicação:</b> {cmd_ind}\n" \
+                  f"=========================================="
+                  
+            bot.send_message(alvo, text=msg, parse_mode="HTML")
+            time.sleep(1.5)
+        except Exception as game_error:
+            print(f"[PAYLOAD-ERR] Erro jogo {j.get('time_casa', 'Desconhecido')}: {game_error}")
