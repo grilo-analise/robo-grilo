@@ -11,11 +11,18 @@ from flask import Flask, jsonify
 
 sys.stdout.reconfigure(line_buffering=True)
 
-# Chave inserida diretamente conforme solicitado
-TOKEN = '1253936cc9da6e852190647c32372996'
+# Lendo as variáveis de ambiente diretamente do Render
+TOKEN = os.environ.get('TELEGRAM_TOKEN', '').strip()
 CHAT_ID = os.environ.get('CHAT_SINAIS_ID', '').strip()
 
-bot = telebot.TeleBot(TOKEN) if TOKEN else None
+# Correção: O bot só inicia se o token for válido e contiver os dois-pontos (:)
+if TOKEN and ":" in TOKEN:
+    bot = telebot.TeleBot(TOKEN)
+    print("[SYS-TG] Bot do Telegram inicializado com sucesso.")
+else:
+    bot = None
+    print("[⚠️ AVISO] TELEGRAM_TOKEN inválido ou não configurado no Render. O bot não responderá comandos.")
+
 app = Flask(__name__)
 
 ARQUIVO_HISTORICO = "historico_ia.json"
@@ -63,7 +70,7 @@ def atualizar_inteligencia_diaria():
 def gerar_e_enviar_sinais(destino_id=None):
     alvo = destino_id if destino_id else CHAT_ID
     if not bot or not alvo:
-        print("[ERR-NET] Socket nulo.")
+        print("[ERR-NET] Socket nulo ou CHAT_SINAIS_ID ausente.")
         return
     fuso_br = datetime.now(timezone(timedelta(hours=-3)))
     data_header = fuso_br.strftime('%d/%m/%Y')
@@ -98,7 +105,7 @@ def gerar_e_enviar_sinais(destino_id=None):
                 f"⚔️ <b>PARTIDA:</b> <b>{j['time_casa']}</b> x <b>{j['time_fora']}</b>\n"
                 f"📆 <b>DATA DO JOGO:</b> {data_header} às {j['horario']}\n"
                 f"⚽ <b>COMPETIÇÃO:</b> {j['pais']} - {j['liga_nome']}\n"
-                f"📈 Vantagem tática calculada através da rede neural com base no retrospecto\n\n"
+                f"📈 Vantagem tática calculada através della rede neural com base no retrospecto\n\n"
                 f"📊 <b>AMBAS MARCAM:</b> {pct_a}% | 📈 <b>+2.5 GOLS:</b> {pct_o}%\n"
                 f"🎯 <b>MÉDIA CHUTES NO GOL:</b> Casa: {c_casa} | Fora: {c_fora}\n"
                 f"🔄 <b>PASSES ESTIMADOS:</b> Casa: {p_casa} | Fora: {p_fora}\n"
