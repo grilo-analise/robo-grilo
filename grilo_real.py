@@ -12,7 +12,7 @@ from flask import Flask, jsonify
 
 sys.stdout.reconfigure(line_buffering=True)
 
-# 1. Configurações de ambiente vindas do terminal do seu Mac
+# 1. Configurações de ambiente recebidas do terminal do seu Mac
 TOKEN = os.environ.get('TELEGRAM_TOKEN', '').strip()
 CHAT_ID = os.environ.get('CHAT_SINAIS_ID', '').strip()
 API_KEY = os.environ.get('FOOTBALL_API_KEY', '').strip()
@@ -69,7 +69,6 @@ def salvar_historico():
         print(f"[SYS-IA] Erro gravação: {e}")
 
 def puxar_jogos_do_dia_reais():
-    """Busca jogos de todas as ligas configuradas agendados para o dia de hoje."""
     if not API_KEY:
         print("[SYS-IA] Erro: FOOTBALL_API_KEY não configurada no Mac.")
         return []
@@ -153,7 +152,6 @@ def gerar_e_enviar_sinais(destino_id=None):
     jogos = puxar_jogos_do_dia_reais()
     
     if not jogos:
-        # Removido envio de mensagem de erro fixa para o canal a cada hora se estiver sem jogos
         print(f"[SYS-IA] Sem jogos disponíveis para enviar nesta hora.")
         return
 
@@ -213,3 +211,9 @@ def gerar_e_enviar_sinais(destino_id=None):
             bot.send_message(alvo, text=msg, parse_mode="HTML")
             time.sleep(1.5)
         except Exception as game_error:
+            print(f"[PAYLOAD-ERR] Erro no processamento da mensagem do jogo: {game_error}")
+
+def loop_relogio_diario():
+    print("[CRON] Temporizador de 1 hora ativo em segundo plano.")
+    atualizar_inteligencia_diaria()
+    gerar_e_enviar_sinais()
