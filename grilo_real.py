@@ -5,7 +5,7 @@ import json
 import telebot
 import time
 import random
-import requests  # Biblioteca necessária para conectar com o servidor da API paga
+import requests
 from threading import Thread
 from datetime import datetime, timedelta, timezone
 from flask import Flask, jsonify
@@ -52,14 +52,10 @@ def salvar_historico():
 
 def puxar_jogos_do_dia_reais():
     hoje_br = datetime.now(timezone(timedelta(hours=-3)))
-    data_str = hoje_br.strftime('%Y-%m-%d') # Formato padrão de API (AAAA-MM-DD)
+    data_str = hoje_br.strftime('%Y-%m-%d')
     
-    # IMPORTANTE: Altere esta URL caso o seu endpoint exija parâmetros diferentes
-    url_api = f"https://api-futebol.com.br" 
-    
-    headers = {
-        "Authorization": f"Bearer {API_FUTEBOL_KEY}"
-    }
+    url_api = "https://api-futebol.com.br" 
+    headers = {"Authorization": f"Bearer {API_FUTEBOL_KEY}"}
     
     try:
         print(f"[API-PAYLOAD] Buscando jogos reais do dia {data_str}...")
@@ -69,8 +65,6 @@ def puxar_jogos_do_dia_reais():
             dados = resposta.json()
             jogos_formatados = []
             
-            # ATENÇÃO: Essa estrutura assume um retorno JSON padrão de listagem.
-            # Caso a estrutura de chaves do seu fornecedor seja diferente, mapeie os campos abaixo.
             for jogo in dados:
                 jogos_formatados.append({
                     "liga_nome": jogo.get("campeonato", {}).get("nome", "Campeonato Desconhecido"),
@@ -78,7 +72,7 @@ def puxar_jogos_do_dia_reais():
                     "time_casa": jogo.get("time_mandante", {}).get("nome_popular", "Casa"),
                     "time_fora": jogo.get("time_visitante", {}).get("nome_popular", "Fora"),
                     "horario": jogo.get("horario", "00:00"),
-                    "zebra_detectada": random.choice([True, False]), # Adaptável conforme scouts da API
+                    "zebra_detectada": random.choice([True, False]),
                     "desfalque": "📋 Plantel atualizado via API",
                     "placares_sugeridos": "1 x 1 ou 2 x 1",
                     "casa_amarelos_med": 2.1,
@@ -94,7 +88,6 @@ def puxar_jogos_do_dia_reais():
     except Exception as e:
         print(f"[API-CRITICAL-ERR] Falha de conexão com a API paga: {e}")
         
-    # Sistema de segurança (Fallback): Se a API cair ou falhar, retorna os dados simulados para o bot não parar
     print("[FALLBACK] Usando dados simulados de contingência.")
     return [
         {"liga_nome": "Brasileirão Série A", "pais": "BRASIL", "time_casa": "Vasco da Gama", "time_fora": "Atlético-MG", "horario": "16:00", "zebra_detectada": True, "desfalque": "⚠️ Crítico: Meio-campo titular lesionado", "placares_sugeridos": "1 x 1 ou 1 x 2", "casa_amarelos_med": 2.8, "fora_amarelos_med": 1.9, "casa_jogadores_pendurados": 4, "fora_jogadores_pendurados": 2},
@@ -199,3 +192,21 @@ def escutar_comandos_telegram():
         gerar_e_enviar_sinais(destino_id=message.chat.id)
     while True:
         try:
+            bot.infinity_polling(timeout=20, long_polling_timeout=10)
+        except Exception:
+            time.sleep(10)
+
+@app.route('/')
+def home():
+    return jsonify({"status": "payload_delivered", "service": "Grilo Core AI"}), 200
+
+if __name__ == '__main__':
+    carregar_historico()
+    t1 = Thread(target=loop_relogio_diario)
+    t1.daemon = True
+    t1.start()
+    if bot:
+        t2 = Thread(target=escutar_comandos_telegram)
+        t2.daemon = True
+        t2.start()
+    port = int(os.environ.get("PORT", 5000))
