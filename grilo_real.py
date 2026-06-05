@@ -204,3 +204,5 @@ def gerar_e_enviar_sinais(destino_id=None):
             bot.send_message(alvo, text=msg, parse_mode="HTML")
             time.sleep(1.5) # Proteção antispam da API do Telegram
         except Exception as game_error:
+            print(f"[PAYLOAD-ERR] Erro jogo {j.get('time_casa', 'Desconhecido')}: {game_error}")
+
