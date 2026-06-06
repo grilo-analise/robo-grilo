@@ -12,7 +12,6 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 sys.stdout.reconfigure(line_buffering=True)
 
 # ══════════════ CONFIGURAÇÃO PRO INTEGRADA DEFINITIVA ══════════════
-# Puxa do painel Render. Se não achar lá, usa o valor fixado como segurança.
 API_KEY = os.environ.get("API_SPORTS_KEY", "1253936cc9da6e852190647c32372996")
 BASE_URL = "https://api-sports.io"
 
@@ -29,15 +28,15 @@ HEADERS = {
 }
 
 # ══════════════ FILTRO DE LIGAS CONFIGURÁVEL ══════════════
-# Lê a lista "LEAGUE_IDS" do Render. Se estiver vazia, usa a lista padrão abaixo.
+# Lê a lista "LEAGUE_IDS" do Render. Se falhar ou estiver vazia, usa a lista padrão.
 LEAGUE_IDS_ENV = os.environ.get("LEAGUE_IDS", "")
 if LEAGUE_IDS_ENV:
     try:
         LIGAS_MUNDO = [int(i.strip()) for i in LEAGUE_IDS_ENV.split(",") if i.strip().isdigit()]
     except Exception:
-        LIGAS_MUNDO = [1, 39, 140, 78, 88, 135, 71, 72, 242]
+        LIGAS_MUNDO = [1, 2, 13, 39, 71, 72, 73, 74, 88, 135, 140, 253]
 else:
-    LIGAS_MUNDO = [1, 39, 140, 78, 88, 135, 71, 72, 242]
+    LIGAS_MUNDO = [1, 2, 13, 39, 71, 72, 73, 74, 88, 135, 140, 253]
 
 HISTORICO_IA = {"total_analises": 145, "acertos": 112, "taxa_acerto_atual": 77.2, "fator_inteligencia_ajuste": 1.02}
 
