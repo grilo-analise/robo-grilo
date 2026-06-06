@@ -7,7 +7,7 @@ import time
 import requests
 from threading import Thread
 from datetime import datetime, timedelta, timezone
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 
 sys.stdout.reconfigure(line_buffering=True)
 
@@ -16,6 +16,9 @@ TOKEN = os.environ.get('TELEGRAM_TOKEN', '').strip()
 CHAT_ID = os.environ.get('CHAT_SINAIS_ID', '').strip()
 API_KEY = os.environ.get('API_FOOTBALL_KEY', '').strip()
 LIGAS_ALVO = [int(x) for x in os.environ.get('LEAGUE_IDS', '1,39,140,78,88,135').split(',') if x.strip()]
+
+# URL do seu Render (mude apenas se o link principal for diferente desse)
+RENDER_URL = os.environ.get('RENDER_EXTERNAL_URL', 'https://onrender.com').strip()
 
 bot = telebot.TeleBot(TOKEN) if TOKEN else None
 app = Flask(__name__)
@@ -90,15 +93,11 @@ def puxar_jogos_do_dia_reais():
     headers = {
         'x-apisports-key': API_KEY,
         'Content-Type': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+        'User-Agent': 'Mozilla/5.0'
     }
     
     try:
         response = requests.get(url, headers=headers, timeout=15)
-        if "data-next-head" in response.text or "<html" in response.text.lower():
-            print("[API-ERR] Bloqueio de rota Cloudflare detectado.")
-            return []
-            
         if response.status_code != 200:
             return []
             
@@ -138,11 +137,9 @@ def puxar_jogos_do_dia_reais():
                 jogos_filtrados.append(item)
                 time.sleep(0.2)
                 
-        print(f"[SYS-API] Sincronizacao concluida. {len(jogos_filtrados)} jogos integrados com dados reais.")
         return jogos_filtrados
-
     except Exception as e:
-        print(f"[SYS-API] Erro critico ao acessar fixtures: {e}")
+        print(f"[SYS-API] Erro nas fixtures: {e}")
         return []
 
 def atualizar_inteligencia_diaria():
@@ -154,7 +151,6 @@ def atualizar_inteligencia_diaria():
 def gerar_e_enviar_sinais(destino_id=None):
     alvo = destino_id if destino_id else CHAT_ID
     if not bot or not alvo:
-        print("[ERR-NET] Conexao com Telegram ausente.")
         return
         
     fuso_br = datetime.now(timezone(timedelta(hours=-3)))
@@ -163,7 +159,7 @@ def gerar_e_enviar_sinais(destino_id=None):
     
     if not jogos:
         if destino_id:
-            bot.send_message(destino_id, text="⚠️ <i>Nenhum jogo ativo encontrado para as ligas configuradas hoje.</i>", parse_mode="HTML")
+            bot.send_message(destino_id, text="⚠️ <i>Nenhum jogo ativo nas ligas hoje.</i>", parse_mode="HTML")
         return
 
     try:
@@ -171,39 +167,35 @@ def gerar_e_enviar_sinais(destino_id=None):
             f"📅 <b>═════════ JOGOS DO DIA {data_header} ═════════</b>\n\n"
             f"📋 <b>BOLETIM AUTOMÁTICO - ANÁLISE PROFUNDA</b>\n"
             f"📅 <b>EMISSÃO:</b> {data_header} às {fuso_br.strftime('%H:%M')}\n"
-            f"🎯 <b>ASSERTIVIDADE ACUMULADA DA IA:</b> ✅ {HISTORICO_IA['taxa_acerto_atual']}% de Green\n"
-            f"🌍 <b>MÉTRICA ATIVA:</b> Filtro estatístico unificado via API-Sports"
+            f"🎯 <b>ASSERTIVIDADE ACUMULADA:</b> ✅ {HISTORICO_IA['taxa_acerto_atual']}% de Green"
         )
         bot.send_message(alvo, text=abertura, parse_mode="HTML")
-        time.sleep(1.5)
-    except Exception as e:
-        print(f"[ERR-TG] Erro no envio do cabecalho: {e}")
+        time.sleep(1)
+    except Exception:
+        pass
         
     for j in jogos:
         try:
             msg = (
                 f"⚔️ <b>PARTIDA:</b> <b>{j['time_casa']}</b> x <b>{j['time_fora']}</b>\n"
-                f"📆 <b>DATA DO JOGO:</b> {data_header} às {j['horario']}\n"
+                f"📆 <b>DATA:</b> {data_header} às {j['horario']}\n"
                 f"⚽ <b>COMPETIÇÃO:</b> {j['pais']} - {j['liga_nome']}\n\n"
                 f"📊 <b>AMBAS MARCAM:</b> {j['ambas_marcam_pct']}\n"
                 f"📈 <b>TENDÊNCIA +2.5 GOLS:</b> {j['mais_gols_pct']}\n\n"
-                f"🟨 <b>MÉDIA HISTÓRICA DE CARTÕES AMARELOS:</b>\n"
-                f"🏠 {j['time_casa']}: {j['casa_amarelos_med']} por jogo\n"
-                f"🚀 {j['time_fora']}: {j['fora_amarelos_med']} por jogo\n"
-                f"📊 <b>ESTIMATIVA COMBINADA PARA O CONFRONTO:</b> {j['estimativa_total_cartoes']} cartões\n\n"
-                f"🔷 <b>DIRETRIZ DA IA (CONSELHO DA API):</b>\n📋 <code>{j['aposta_sugerida']}</code>\n"
+                f"🟨 <b>MÉDIA CARTÕES AMARELOS:</b>\n"
+                f"🏠 {j['time_casa']}: {j['casa_amarelos_med']}\n"
+                f"🚀 {j['time_fora']}: {j['fora_amarelos_med']}\n"
+                f"📊 <b>TOTAL COMBINADO:</b> {j['estimativa_total_cartoes']} cartões\n\n"
+                f"🔷 <b>CONSELHO DA API:</b>\n📋 <code>{j['aposta_sugerida']}</code>\n"
                 f"=========================================="
             )
             bot.send_message(alvo, text=msg, parse_mode="HTML")
-            time.sleep(1.5)
-        except Exception as game_error:
-            print(f"[PAYLOAD-ERR] Erro ao empacotar dados reais do jogo: {game_error}")
+            time.sleep(1)
+        except Exception:
+            pass
 
 def loop_relogio_diario():
     print("[CRON] Daemon agendador ativo.")
-    atualizar_inteligencia_diaria()
-    gerar_e_enviar_sinais()
-    
     while True:
         try:
             fuso_br = timezone(timedelta(hours=-3))
@@ -215,12 +207,31 @@ def loop_relogio_diario():
             atualizar_inteligencia_diaria()
             gerar_e_enviar_sinais()
             time.sleep(10)
-        except Exception as e:
-            print(f"[CRON-ERR] Reiniciando agendador: {e}")
+        except Exception:
             time.sleep(30)
 
-# Inicialização Absoluta de Handlers Globais (Fora do Polling Bloqueante)
+# Mapeamento de Comandos do Bot
 if bot:
     @bot.message_handler(commands=['start'])
     def send_welcome(message):
-        bot.reply_to(message, "🤖 <b>Módulo Estatístico Ativo!</b>\nUse /sinais para gerar análises reais.", parse_mode="HTML")
+        bot.reply_to(message, "🤖 <b>Módulo Estatístico Ativo via Webhook!</b>\nUse /sinais para gerar as análises.", parse_mode="HTML")
+
+    @bot.message_handler(commands=['sinais', 'hj', 'hoje'])
+    def demand_reply(message):
+        bot.reply_to(message, "⏳ <i>Acessando endpoints e processando dados reais...</i>", parse_mode="HTML")
+        gerar_e_enviar_sinais(destino_id=message.chat.id)
+
+# ROTA DO WEBHOOK: O Telegram enviará as mensagens para cá
+@app.route('/webhook', methods=['POST'])
+def receive_update():
+    if request.headers.get('content-type') == 'application/json':
+        json_string = request.get_data().decode('utf-8')
+        update = telebot.types.Update.de_json(json_string)
+        if bot:
+            bot.process_new_updates([update])
+        return '', 200
+    else:
+        return jsonify({"error": "Invalid Content-Type"}), 403
+
+@app.route('/')
+def home():
