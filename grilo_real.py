@@ -11,11 +11,14 @@ from flask import Flask, jsonify
 
 sys.stdout.reconfigure(line_buffering=True)
 
-# Configurações de Ambiente
+# Configurações de Ambiente (Render Environment)
 TOKEN = os.environ.get('TELEGRAM_TOKEN', '').strip()
 CHAT_ID = os.environ.get('CHAT_SINAIS_ID', '').strip()
 API_KEY = os.environ.get('API_FOOTBALL_KEY', '').strip()
-LIGAS_ALVO = [int(x) for x in os.environ.get('LEAGUE_IDS', '1,39,140,78,88,135').split(',') if x.strip()]
+
+# Ligas padrão caso a variável do Render esteja vazia (Inclui Brasileirão Série A, Premier League, LaLiga, etc.)
+LIGAS_PADRAO = '71,39,140,78,135,61' 
+LIGAS_ALVO = [int(x) for x in os.environ.get('LEAGUE_IDS', LIGAS_PADRAO).split(',') if x.strip()]
 
 bot = telebot.TeleBot(TOKEN) if TOKEN else None
 app = Flask(__name__)
@@ -23,21 +26,37 @@ app = Flask(__name__)
 ARQUIVO_HISTORICO = "historico_ia.json"
 HISTORICO_IA = {"total_analises": 145, "acertos": 112, "taxa_acerto_atual": 77.2, "fator_inteligencia_ajuste": 1.02}
 
+# CORREÇÃO CRÍTICA DO 404: Rota principal que o Render consulta para saber se o app está vivo
+@app.route('/')
+def home():
+    diagnostico = {
+        "status": "online",
+        "bot_telegram_configurado": bot is not None,
+        "api_football_key_configurada": bool(API_KEY),
+        "ligas_monitoradas": LIGAS_ALVO,
+        "horario_servidor": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    }
+    return jsonify(diagnostico), 200
+
+def salvar_historico():
+    global HISTORICO_IA
+    try:
+        with open(ARQUIVO_HISTORICO, "w", encoding="utf-8") as f:
+            json.dump(HISTORICO_IA, f, ensure_ascii=False, indent=4)
+    except Exception as e:
+        print(f"[SYS-IA] Erro ao salvar historico: {e}")
+
 def carregar_historico():
     global HISTORICO_IA
     if os.path.exists(ARQUIVO_HISTORICO):
         try:
             with open(ARQUIVO_HISTORICO, "r", encoding="utf-8") as f:
                 HISTORICO_IA = json.load(f)
-            print("[SYS-IA] Memoria de acertos carregada.")
+            print("[SYS-IA] Memoria de acertos carregada com sucesso.")
         except Exception as e:
-            print(f"[SYS-IA] Erro I/O: {e}")
+            print(f"[SYS-IA] Erro I/O historico: {e}")
     else:
-        try:
-            with open(ARQUIVO_HISTORICO, "w", encoding="utf-8") as f:
-                json.dump(HISTORICO_IA, f, ensure_ascii=False, indent=4)
-        except Exception:
-            pass
+        salvar_historico()
 
 def buscar_predicao_real(fixture_id):
     url = f"https://api-sports.io{fixture_id}"
@@ -45,21 +64,23 @@ def buscar_predicao_real(fixture_id):
     try:
         res = requests.get(url, headers=headers, timeout=8)
         if res.status_code == 200:
-            response_data = res.json().get('response', [])
-            if response_data and len(response_data) > 0:
-                dados_primeiros = response_data[0]
+            dados_api = res.json().get('response', [])
+            if dados_api and len(dados_api) > 0:
+                dados_primeiros = dados_api[0]
                 pred = dados_primeiros.get('predictions', {})
                 goals = dados_primeiros.get('goals', {})
-                mb_sim = goals.get('both', '50%')
-                over_pct = goals.get('over', '55%')
+                
+                mb_sim = goals.get('home', '50')  
+                over_pct = goals.get('over', '55')
+                
                 return {
-                    "ambas_marcam": f"{mb_sim}",
-                    "mais_gols_pct": f"{over_pct}",
-                    "conselho": pred.get('advice', 'Analise pre-live ativa')
+                    "ambas_marcam": f"{mb_sim}%",
+                    "mais_gols_pct": f"{over_pct}%",
+                    "conselho": pred.get('advice', 'Analise tática em andamento')
                 }
     except Exception as e:
         print(f"[API-ERR] Falha em predictions {fixture_id}: {e}")
-    return {"ambas_marcam": "50%", "mais_gols_pct": "50%", "conselho": "Analisar comportamento tatico pre-live."}
+    return {"ambas_marcam": "N/A", "mais_gols_pct": "N/A", "conselho": "Sem recomendação automática disponível."}
 
 def buscar_estatisticas_times(league_id, season, team_id):
     url = f"https://api-sports.io{league_id}&season={season}&team={team_id}"
@@ -72,17 +93,19 @@ def buscar_estatisticas_times(league_id, season, team_id):
                 cartoes = dados.get('cards', {}).get('yellow', {})
                 total_cartoes = 0
                 jogos = dados.get('fixtures', {}).get('played', {}).get('total', 1)
-                for info in cartoes.values():
+                
+                for intervalo, info in cartoes.items():
                     if isinstance(info, dict) and info.get('total'):
                         total_cartoes += info.get('total')
+                
                 return round(total_cartoes / jogos if jogos > 0 else 2.1, 1)
     except Exception as e:
-        print(f"[API-ERR] Erro estatísticas do time {team_id}: {e}")
+        print(f"[API-ERR] Erro estatisticas do time {team_id}: {e}")
     return 2.1
 
 def puxar_jogos_do_dia_reais():
     if not API_KEY:
-        print("[SYS-API] API_FOOTBALL_KEY ausente.")
+        print("[⚡ CRÍTICO] API_FOOTBALL_KEY NAO ENCONTRADA NAS VARIAVEIS DE AMBIENTE.")
         return []
 
     hoje_br = datetime.now(timezone(timedelta(hours=-3)))
@@ -95,13 +118,21 @@ def puxar_jogos_do_dia_reais():
     }
     
     try:
+        print(f"[SYS-API] Buscando jogos para a data: {data_api}...")
         response = requests.get(url, headers=headers, timeout=12)
+        
+        if response.status_code == 401 or response.status_code == 403:
+            print("[⚡ CRÍTICO] Sua API_FOOTBALL_KEY foi recusada! Verifique se pagou o plano correto v3.")
+            return []
+            
         if response.status_code != 200:
+            print(f"[SYS-API] Erro HTTP {response.status_code} ao acessar API-Football.")
             return []
             
         fixtures = response.json().get('response', [])
-        jogos_filtrados = []
+        print(f"[SYS-API] Total de jogos capturados na API hoje no mundo: {len(fixtures)}")
         
+        jogos_filtrados = []
         for f in fixtures:
             league_info = f.get('league', {})
             league_id = league_info.get('id')
@@ -133,34 +164,35 @@ def puxar_jogos_do_dia_reais():
                     "estimativa_total_cartoes": round(media_cartoes_casa + media_cartoes_fora, 1)
                 }
                 jogos_filtrados.append(item)
-                time.sleep(0.3)
+                time.sleep(0.2)  # Delay preventivo suave
                 
-        print(f"[SYS-API] Sincronização concluída. {len(jogos_filtrados)} jogos reais mapeados.")
+        print(f"[SYS-API] Filtro concluido. {len(jogos_filtrados)} jogos encontrados nas suas ligas alvo.")
         return jogos_filtrados
     except Exception as e:
-        print(f"[SYS-API] Erro crítico nas fixtures: {e}")
+        print(f"[SYS-API] Erro critico na leitura das fixtures: {e}")
         return []
-
-def atualizar_inteligencia_diaria():
-    global HISTORICO_IA
-    HISTORICO_IA["total_analises"] += 5
-    HISTORICO_IA["taxa_acerto_atual"] = round((HISTORICO_IA["acertos"] / HISTORICO_IA["total_analises"]) * 100, 1)
-    salvar_historico()
 
 def gerar_e_enviar_sinais(destino_id=None):
     alvo = destino_id if destino_id else CHAT_ID
-    if not bot or not alvo:
-        print("[SYS-TG] Destinatário nulo ou inválido.")
+    if not bot:
+        print("[⚡ CRÍTICO] TELEGRAM_TOKEN NAO CONFIGURADO. MENSAGEM NAO ENVIADA.")
+        return
+    if not alvo:
+        print("[⚡ CRÍTICO] CHAT_SINAIS_ID NAO CONFIGURADO. MENSAGEM NAO ENVIADA.")
         return
         
     fuso_br = datetime.now(timezone(timedelta(hours=-3)))
     data_header = fuso_br.strftime('%d/%m/%Y')
+    
+    # Notifica o usuário no chat privado caso ele tenha solicitado manualmente
+    if destino_id:
+        bot.send_message(destino_id, text="🔄 <i>Buscando e processando dados da API... Aguarde.</i>", parse_mode="HTML")
+
     jogos = puxar_jogos_do_dia_reais()
     
     if not jogos:
-        print("[SYS-IA] Nenhum jogo filtrado encontrado na API para hoje.")
         if destino_id:
-            bot.send_message(destino_id, text="⚠️ <i>Nenhum jogo ativo encontrado hoje.</i>", parse_mode="HTML")
+            bot.send_message(destino_id, text="⚠️ <i>Nenhum jogo ativo encontrado hoje para as ligas configuradas.</i>", parse_mode="HTML")
         return
 
     try:
@@ -168,65 +200,25 @@ def gerar_e_enviar_sinais(destino_id=None):
             f"📅 <b>═════════ JOGOS DO DIA {data_header} ═════════</b>\n\n"
             f"📋 <b>BOLETIM AUTOMÁTICO - DADOS 100% REAIS</b>\n"
             f"📅 <b>EMISSÃO:</b> {data_header} às {fuso_br.strftime('%H:%M')}\n"
-            f"🎯 <b>ASSERTIVIDADE ACUMULADA DA IA:</b> ✅ {HISTORICO_IA['taxa_acerto_atual']}% de Green"
+            f"🎯 <b>ASSERTIVIDADE DA IA:</b> ✅ {HISTORICO_IA['taxa_acerto_atual']}% de Green"
         )
         bot.send_message(alvo, text=abertura, parse_mode="HTML")
-        time.sleep(1.2)
+        time.sleep(1.0)
     except Exception as e:
-        print(f"[SYS-TG] Falha ao enviar cabeçalho: {e}")
+        print(f"[SYS-TG] Erro ao enviar cabecalho para {alvo}: {e}")
         
     for j in jogos:
         try:
             msg = (
                 f"⚔️ <b>PARTIDA:</b> <b>{j['time_casa']}</b> x <b>{j['time_fora']}</b>\n"
-                f"📆 <b>DATA DO JOGO:</b> {data_header} às {j['horario']}\n"
+                f"📆 <b>HORÁRIO:</b> {data_header} às {j['horario']}\n"
                 f"⚽ <b>COMPETIÇÃO:</b> {j['pais']} - {j['liga_nome']}\n\n"
                 f"📊 <b>AMBAS MARCAM:</b> {j['ambas_marcam_pct']}\n"
                 f"📈 <b>TENDÊNCIA +2.5 GOLS:</b> {j['mais_gols_pct']}\n\n"
                 f"🟨 <b>MÉDIA CARTÕES AMARELOS:</b>\n"
-                f"🏠 {j['time_casa']}: {j['casa_amarelos_med']} por jogo\n"
-                f"🚀 {j['time_fora']}: {j['fora_amarelos_med']} por jogo\n"
-                f"📊 <b>ESTIMATIVA TOTAL DO JOGO:</b> {j['estimativa_total_cartoes']} cartões\n\n"
+                f"🏠 {j['time_casa']}: {j['casa_amarelos_med']}/jogo\n"
+                f"🚀 {j['time_fora']}: {j['fora_amarelos_med']}/jogo\n"
+                f"📊 <b>ESTIMATIVA DO JOGO:</b> {j['estimativa_total_cartoes']} cartões\n\n"
                 f"🔷 <b>CONSELHO DA API-FOOTBALL:</b>\n📋 <code>{j['aposta_sugerida']}</code>\n"
                 f"=========================================="
             )
-            bot.send_message(alvo, text=msg, parse_mode="HTML")
-            time.sleep(1.2)
-        except Exception as game_error:
-            print(f"[SYS-TG] Falha ao postar card do jogo: {game_error}")
-
-def loop_relogio_diario():
-    print("[CRON] Agendador automático ativado.")
-    time.sleep(8)
-    print("[CRON] Executando varredura automatizada inicial...")
-    gerar_e_enviar_sinais()
-    
-    while True:
-        try:
-            fuso_br = timezone(timedelta(hours=-3))
-            agora = datetime.now(fuso_br)
-            amanha = agora + timedelta(days=1)
-            alvo = datetime(amanha.year, amanha.month, amanha.day, 8, 0, 0, tzinfo=fuso_br)
-            time.sleep((alvo - agora).total_seconds())
-            gerar_e_enviar_sinais()
-            time.sleep(10)
-        except Exception:
-            time.sleep(30)
-
-# ESCUTA DE COMANDOS REESTRUTURADA DENTRO DE UMA THREAD LIMPA (ANTI-ERROS DE INDENTAÇÃO)
-def iniciar_escuta_bot():
-    if not bot:
-        return
-        
-    @bot.message_handler(commands=['start'])
-    def send_welcome(message):
-        bot.reply_to(message, "🤖 Módulo com Dados Reais da API Ativo!")
-
-    @bot.message_handler(commands=['sinais', 'hoje'])
-    def demand_reply(message):
-        print(f"[USER-CMD] Solicitação manual recebida do chat {message.chat.id}")
-        t_manual = Thread(target=gerar_e_enviar_sinais, kwargs={"destino_id": message.chat.id})
-        t_manual.start()
-
-    print("[TG] Escuta contínua de comandos iniciada.")
-    
