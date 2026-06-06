@@ -14,8 +14,6 @@ sys.stdout.reconfigure(line_buffering=True)
 # Configurações de Ambiente (Render)
 TOKEN = os.environ.get('TELEGRAM_TOKEN', '').strip()
 CHAT_ID = os.environ.get('CHAT_SINAIS_ID', '').strip()
-
-# Busca qualquer um dos nomes de chave configurados no seu painel da Render (vistos na foto)
 API_KEY = os.environ.get('FOOTBALL_API_TOKEN', os.environ.get('API_SPORTS_KEY', '')).strip()
 
 # Ligas padrão mapeadas: 71 = Brasileirão Série A, 39 = Premier League, 140 = LaLiga, 78 = Bundesliga, 135 = Serie A Itália
@@ -25,9 +23,7 @@ LIGAS_ALVO = [int(x) for x in os.environ.get('LEAGUE_IDS', LIGAS_PADRAO).split('
 bot = telebot.TeleBot(TOKEN) if TOKEN else None
 app = Flask(__name__)
 
-# ENDPOINT EXATO DA API-SPORTS HOMOLOGADO PARA SEU PLANO
 BASE_URL = "https://api-sports.io"
-
 ARQUIVO_HISTORICO = "historico_ia.json"
 HISTORICO_IA = {"total_analises": 145, "acertos": 112, "taxa_acerto_atual": 77.2, "fator_inteligencia_ajuste": 1.02}
 
@@ -66,20 +62,20 @@ def buscar_predicao_real(fixture_id):
     url = f"{BASE_URL}/predictions?fixture={fixture_id}"
     headers = {
         'x-apisports-key': API_KEY, 
-        'x-rapidapi-host': 'v1.football.api-sports.io',
         'Content-Type': 'application/json'
     }
     try:
         res = requests.get(url, headers=headers, timeout=8)
         if res.status_code == 200:
             dados_api = res.json().get('response', [])
-            if dados_api:
-                dados_primeiros = dados_api[0] if isinstance(dados_api, list) else dados_api
+            if dados_api and len(dados_api) > 0:
+                # CORREÇÃO CRÍTICA: Captura o primeiro objeto de forma segura dentro do array retornado da API
+                dados_primeiros = dados_api[0]
                 pred = dados_primeiros.get('predictions', {})
                 goals = dados_primeiros.get('goals', {})
                 
-                mb_sim = goals.get('home', '50')  
-                over_pct = goals.get('over', '55')
+                mb_sim = goals.get('home', '50%')  
+                over_pct = goals.get('over', '55%')
                 
                 return {
                     "ambas_marcam": f"{mb_sim}",
@@ -94,7 +90,6 @@ def buscar_estatisticas_times(league_id, season, team_id):
     url = f"{BASE_URL}/teams/statistics?league={league_id}&season={season}&team={team_id}"
     headers = {
         'x-apisports-key': API_KEY, 
-        'x-rapidapi-host': 'v1.football.api-sports.io',
         'Content-Type': 'application/json'
     }
     try:
@@ -125,12 +120,11 @@ def puxar_jogos_do_dia_reais():
     url = f"{BASE_URL}/fixtures?date={data_api}&timezone=America/Sao_Paulo"
     headers = {
         'x-apisports-key': API_KEY,
-        'x-rapidapi-host': 'v1.football.api-sports.io',
         'Content-Type': 'application/json'
     }
     
     try:
-        print(f"[SYS-API] Conectando ao link Pro ({BASE_URL}) para a data {data_api}...")
+        print(f"[SYS-API] Buscando jogos para a data {data_api}...")
         response = requests.get(url, headers=headers, timeout=12)
         
         if response.status_code != 200:
@@ -138,7 +132,7 @@ def puxar_jogos_do_dia_reais():
             return []
             
         fixtures = response.json().get('response', [])
-        print(f"[SYS-API] Total de jogos mapeados no link oficial hoje: {len(fixtures)}")
+        print(f"[SYS-API] Total de jogos encontrados hoje na API: {len(fixtures)}")
         
         jogos_filtrados = []
         for f in fixtures:
@@ -172,9 +166,10 @@ def puxar_jogos_do_dia_reais():
                     "estimativa_total_cartoes": round(media_cartoes_casa + media_cartoes_fora, 1)
                 }
                 jogos_filtrados.append(item)
-                time.sleep(0.1)
+                print(f"[SYS-API] Mapeado com sucesso: {item['time_casa']} x {item['time_fora']}")
+                time.sleep(0.2)
                 
-        print(f"[SYS-API] Filtro concluido. {len(jogos_filtrados)} jogos encontrados nas ligas alvo.")
+        print(f"[SYS-API] Filtro concluido. {len(jogos_filtrados)} jogos encontrados nas ligas monitoradas.")
         return jogos_filtrados
     except Exception as e:
         print(f"[SYS-API] Erro critico na leitura das fixtures: {e}")
@@ -189,17 +184,11 @@ def gerar_e_enviar_sinais(destino_id=None):
     fuso_br = datetime.now(timezone(timedelta(hours=-3)))
     data_header = fuso_br.strftime('%d/%m/%Y')
     
-    if destino_id:
-        bot.send_message(destino_id, text="🔄 <i>Buscando jogos no painel oficial API-Sports...</i>", parse_mode="HTML")
-
+    print("[SYS-TG] Iniciando processamento de envio de boletins...")
     jogos = puxar_jogos_do_dia_reais()
     
-    if not jobs: # Correção de digitação interna do script original
-        jogos = []
-        
     if not jogos:
-        if destino_id:
-            bot.send_message(destino_id, text="⚠️ <i>Nenhum jogo mapeado para hoje nessas ligas. Tente alterar os IDs das ligas.</i>", parse_mode="HTML")
+        print("[SYS-TG] Nenhum jogo localizado para enviar hoje.")
         return
 
     try:
@@ -234,6 +223,18 @@ def gerar_e_enviar_sinais(destino_id=None):
             print(f"[SYS-TG] Falha card: {game_error}")
 
 def loop_relogio_diario():
-    print("[CRON] Monitor automático ativado.")
+    print("[CRON] Monitor automático iniciado com sucesso.")
     carregar_historico()
-    time.sleep(15)
+    
+    # Aguarda 15 segundos iniciais e realiza um disparo automático imediato de teste
+    time.sleep(15) 
+    gerar_e_enviar_sinais()
+    
+    while True:
+        try:
+            fuso_br = timezone(timedelta(hours=-3))
+            agora = datetime.now(fuso_br)
+            # Varredura agendada para acontecer rigorosamente às 06:00 da manhã de Brasília
+            if agora.hour == 6 and agora.minute == 0:
+                gerar_e_enviar_sinais()
+                time.sleep(60)
