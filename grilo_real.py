@@ -51,17 +51,16 @@ def buscar_predicao_real(fixture_id):
         res = requests.get(url, headers=headers, timeout=10)
         if res.status_code == 200:
             dados = res.json().get('response', [])
-            if dados:
+            if dados and len(dados) > 0:
                 pred = dados[0].get('predictions', {})
-                # Retorna percentuais calculados diretamente pelos algoritmos da API
                 return {
                     "ambas_marcam": pred.get('goals', {}).get('both', '50%'),
-                    "mais_2_5_gols": pred.get('goals', {}).get('over', '50%'),
-                    "conselho": pred.get('advice', 'Análise de campo padrão')
+                    "mais_gols_pct": pred.get('goals', {}).get('over', '50%'),
+                    "conselho": pred.get('advice', 'Analise pre-live padrao')
                 }
     except Exception as e:
         print(f"[API-PRED-ERR] Falha ao coletar previsao: {e}")
-    return {"ambas_marcam": "N/A", "mais_2_5_gols": "N/A", "conselho": "Analisar comportamento tático ao vivo."}
+    return {"ambas_marcam": "50%", "mais_gols_pct": "50%", "conselho": "Analisar comportamento tatico ao vivo."}
 
 def buscar_estatisticas_times(league_id, season, team_id):
     """Busca as médias históricas de cartões de uma equipe na competição atual"""
@@ -72,10 +71,9 @@ def buscar_estatisticas_times(league_id, season, team_id):
         if res.status_code == 200:
             dados = res.json().get('response', {})
             cartoes = dados.get('cards', {}).get('yellow', {})
-            # Realiza uma soma ponderada simples das médias de cartões recebidos por jogo
             total_cartoes = 0
             jogos = dados.get('fixtures', {}).get('played', {}).get('total', 1)
-            for minuto, info in cartoes.items():
+            for info in cartoes.values():
                 if info.get('total'):
                     total_cartoes += info.get('total')
             return round(total_cartoes / jogos if jogos > 0 else 0, 1)
@@ -123,7 +121,6 @@ def puxar_jogos_do_dia_reais():
                 id_casa = f.get('teams', {}).get('home', {}).get('id')
                 id_fora = f.get('teams', {}).get('away', {}).get('id')
                 
-                # Coleta de previsões e estatísticas reais direto dos endpoints complementares
                 dados_predicao = buscar_predicao_real(fixture_info.get('id'))
                 media_cartoes_casa = buscar_estatisticas_times(league_id, season, id_casa)
                 media_cartoes_fora = buscar_estatisticas_times(league_id, season, id_fora)
@@ -135,14 +132,14 @@ def puxar_jogos_do_dia_reais():
                     "time_fora": f.get('teams', {}).get('away', {}).get('name'),
                     "horario": br_time.strftime('%H:%M'),
                     "ambas_marcam_pct": dados_predicao["ambas_marcam"],
-                    "mais_gols_pct": dados_predicao["mais_2_5_gols"],
+                    "mais_gols_pct": dados_predicao["mais_gols_pct"],
                     "aposta_sugerida": dados_predicao["conselho"],
                     "casa_amarelos_med": media_cartoes_casa,
                     "fora_amarelos_med": media_cartoes_fora,
                     "estimativa_total_cartoes": round(media_cartoes_casa + media_cartoes_fora, 1)
                 }
                 jogos_filtrados.append(item)
-                time.sleep(0.5) # Delay de segurança para respeitar o limite de requisições por minuto do plano da API
+                time.sleep(0.3)
                 
         print(f"[SYS-API] Sincronizacao concluida. {len(jogos_filtrados)} jogos integrados com dados reais.")
         return jogos_filtrados
@@ -217,3 +214,14 @@ def loop_relogio_diario():
             amanha = agora + timedelta(days=1)
             alvo = datetime(amanha.year, amanha.month, amanha.day, 8, 0, 0, tzinfo=fuso_br)
             tempo_espera = (alvo - agora).total_seconds()
+            time.sleep(tempo_espera)
+            atualizar_inteligencia_diaria()
+            gerar_e_enviar_sinais()
+            time.sleep(10)
+        except Exception as e:
+            print(f"[CRON-ERR] Reiniciando agendador: {e}")
+            time.sleep(30)
+
+def escutar_comandos_telegram():
+    if not bot:
+        return
