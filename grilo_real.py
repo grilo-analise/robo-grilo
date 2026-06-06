@@ -216,5 +216,6 @@ def loop_relogio_diario():
             print(f"[CRON-ERR] Loop de agendamento reiniciado: {e}")
             time.sleep(30)
 
-# Inicialização dos comandos do Bot usando escuta em Thread estável
-if bot:
+def escutar_comandos_telegram():
+    if not bot:
+        return
