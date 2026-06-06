@@ -40,7 +40,6 @@ def carregar_historico():
             pass
 
 def buscar_predicao_real(fixture_id):
-    """Busca as previsões reais corrigindo o acesso seguro à lista da API-Football"""
     url = f"https://api-sports.io{fixture_id}"
     headers = {'x-apisports-key': API_KEY, 'Content-Type': 'application/json'}
     try:
@@ -50,20 +49,19 @@ def buscar_predicao_real(fixture_id):
             if response_data and len(response_data) > 0:
                 dados_primeiros = response_data[0]
                 pred = dados_primeiros.get('predictions', {})
-                # Coleta percentuais nativos calculados pelos algoritmos da API Pro
-                mb_sim = pred.get('goals', {}).get('both', {}).get('home', '50%')
-                over_pct = pred.get('goals', {}).get('over', '55%')
+                goals = dados_primeiros.get('goals', {})
+                mb_sim = goals.get('both', '50%')
+                over_pct = goals.get('over', '55%')
                 return {
-                    "ambas_marcam": f"{mb_sim}" if mb_sim else "Sim",
-                    "mais_gols_pct": f"{over_pct}" if over_pct else "55%",
-                    "conselho": pred.get('advice', 'Análise tática pré-live ativa')
+                    "ambas_marcam": f"{mb_sim}",
+                    "mais_gols_pct": f"{over_pct}",
+                    "conselho": pred.get('advice', 'Analise pre-live ativa')
                 }
     except Exception as e:
-        print(f"[API-ERR] Falha ao ler predictions da partida {fixture_id}: {e}")
-    return {"ambas_marcam": "50%", "mais_gols_pct": "50%", "conselho": "Analisar comportamento tático pré-live."}
+        print(f"[API-ERR] Falha em predictions {fixture_id}: {e}")
+    return {"ambas_marcam": "50%", "mais_gols_pct": "50%", "conselho": "Analisar comportamento tatico pre-live."}
 
 def buscar_estatisticas_times(league_id, season, team_id):
-    """Busca as médias de cartões tratando respostas vazias com segurança"""
     url = f"https://api-sports.io{league_id}&season={season}&team={team_id}"
     headers = {'x-apisports-key': API_KEY, 'Content-Type': 'application/json'}
     try:
@@ -90,7 +88,6 @@ def puxar_jogos_do_dia_reais():
     hoje_br = datetime.now(timezone(timedelta(hours=-3)))
     data_api = hoje_br.strftime('%Y-%m-%d')
     url = f"https://api-sports.io{data_api}"
-    
     headers = {
         'x-apisports-key': API_KEY,
         'Content-Type': 'application/json',
@@ -100,7 +97,6 @@ def puxar_jogos_do_dia_reais():
     try:
         response = requests.get(url, headers=headers, timeout=12)
         if response.status_code != 200:
-            print(f"[SYS-API] HTTP Erro: {response.status_code}")
             return []
             
         fixtures = response.json().get('response', [])
@@ -164,7 +160,7 @@ def gerar_e_enviar_sinais(destino_id=None):
     if not jogos:
         print("[SYS-IA] Nenhum jogo filtrado encontrado na API para hoje.")
         if destino_id:
-            bot.send_message(destino_id, text="⚠️ <i>Nenhum jogo ativo encontrado para as ligas configuradas hoje.</i>", parse_mode="HTML")
+            bot.send_message(destino_id, text="⚠️ <i>Nenhum jogo ativo encontrado hoje.</i>", parse_mode="HTML")
         return
 
     try:
@@ -217,10 +213,19 @@ def loop_relogio_diario():
         except Exception:
             time.sleep(30)
 
-if bot:
+# ESCUTA DE COMANDOS REESTRUTURADA DENTRO DE UMA THREAD LIMPA (ANTI-ERROS DE INDENTAÇÃO)
+def iniciar_escuta_bot():
+    if not bot:
+        return
+        
     @bot.message_handler(commands=['start'])
     def send_welcome(message):
         bot.reply_to(message, "🤖 Módulo com Dados Reais da API Ativo!")
 
     @bot.message_handler(commands=['sinais', 'hoje'])
     def demand_reply(message):
+        print(f"[USER-CMD] Solicitação manual recebida do chat {message.chat.id}")
+        t_manual = Thread(target=gerar_e_enviar_sinais, kwargs={"destino_id": message.chat.id})
+        t_manual.start()
+
+    print("[TG] Escuta contínua de comandos iniciada.")
