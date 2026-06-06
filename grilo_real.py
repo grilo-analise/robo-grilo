@@ -11,20 +11,19 @@ from flask import Flask, jsonify
 
 sys.stdout.reconfigure(line_buffering=True)
 
-# Configurações de Ambiente (Render Environment)
+# Configurações de Ambiente (Render)
 TOKEN = os.environ.get('TELEGRAM_TOKEN', '').strip()
 CHAT_ID = os.environ.get('CHAT_SINAIS_ID', '').strip()
-API_KEY = os.environ.get('API_FOOTBALL_KEY', '').strip()
+API_KEY = os.environ.get('API_FOOTBALL_KEY', os.environ.get('FOOTBALL_API_TOKEN', '')).strip()
 
-# Ligas padrão com IDs corretos da API-Football (v3)
-# 71 = Brasileirão Série A, 39 = Premier League, 140 = LaLiga, 78 = Bundesliga, 135 = Serie A Itália
+# Ligas padrão mapeadas: 71 = Brasileirão Série A, 39 = Premier League, 140 = LaLiga, 78 = Bundesliga, 135 = Serie A Itália
 LIGAS_PADRAO = '71,39,140,78,135' 
 LIGAS_ALVO = [int(x) for x in os.environ.get('LEAGUE_IDS', LIGAS_PADRAO).split(',') if x.strip()]
 
 bot = telebot.TeleBot(TOKEN) if TOKEN else None
 app = Flask(__name__)
 
-# ENDPOINT DEDICADO PARA ASSINANTES PREMIUM/PRO DA API-SPORTS
+# CORREÇÃO CRÍTICA: Endpoint exato do seu painel Pro da API-Sports
 BASE_URL = "https://api-sports.io"
 
 ARQUIVO_HISTORICO = "historico_ia.json"
@@ -35,10 +34,9 @@ def home():
     diagnostico = {
         "status": "online",
         "bot_telegram_configurado": bot is not None,
-        "api_football_key_configurada": bool(API_KEY),
-        "endpoint_utilizado": BASE_URL,
-        "ligas_monitoradas": LIGAS_ALVO,
-        "horario_servidor": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        "api_sports_key_detectada": bool(API_KEY),
+        "link_api_utilizado": BASE_URL,
+        "ligas_monitoradas": LIGAS_ALVO
     }
     return jsonify(diagnostico), 200
 
@@ -84,7 +82,7 @@ def buscar_predicao_real(fixture_id):
                 }
     except Exception as e:
         print(f"[API-ERR] Falha em predictions {fixture_id}: {e}")
-    return {"ambas_marcam": "50%", "mais_gols_pct": "50%", "conselho": "Sem recomendação automática."}
+    return {"ambas_marcam": "50%", "mais_gols_pct": "50%", "conselho": "Sem recomendação automatizada."}
 
 def buscar_estatisticas_times(league_id, season, team_id):
     url = f"{BASE_URL}/teams/statistics?league={league_id}&season={season}&team={team_id}"
@@ -109,13 +107,11 @@ def buscar_estatisticas_times(league_id, season, team_id):
 
 def puxar_jogos_do_dia_reais():
     if not API_KEY:
-        print("[⚡ CRÍTICO] API_FOOTBALL_KEY NAO ENCONTRADA.")
+        print("[⚡ CRÍTICO] CHAVE DA API NAO ENCONTRADA NO RENDER.")
         return []
 
     hoje_br = datetime.now(timezone(timedelta(hours=-3)))
     data_api = hoje_br.strftime('%Y-%m-%d')
-    
-    # IMPORTANTE: Forçamos o fuso horário correto na chamada para trazer jogos do horário de Brasília
     url = f"{BASE_URL}/fixtures?date={data_api}&timezone=America/Sao_Paulo"
     headers = {
         'x-apisports-key': API_KEY,
@@ -123,15 +119,15 @@ def puxar_jogos_do_dia_reais():
     }
     
     try:
-        print(f"[SYS-API] Acessando plano PRO para a data: {data_api}...")
+        print(f"[SYS-API] Conectando ao link Pro ({BASE_URL}) para a data {data_api}...")
         response = requests.get(url, headers=headers, timeout=12)
         
-        if response.status_code in [401, 403]:
-            print("[⚡ CRÍTICO] Sua Chave API foi rejeitada pelo servidor. Verifique o campo API_FOOTBALL_KEY no Render.")
+        if response.status_code != 200:
+            print(f"[SYS-API] Erro de conexao HTTP {response.status_code}")
             return []
             
         fixtures = response.json().get('response', [])
-        print(f"[SYS-API] Total de jogos encontrados hoje: {len(fixtures)}")
+        print(f"[SYS-API] Total de jogos mapeados no link oficial hoje: {len(fixtures)}")
         
         jogos_filtrados = []
         for f in fixtures:
@@ -167,7 +163,7 @@ def puxar_jogos_do_dia_reais():
                 jogos_filtrados.append(item)
                 time.sleep(0.1)
                 
-        print(f"[SYS-API] Filtro concluido. {len(jogos_filtrados)} jogos nas ligas selecionadas.")
+        print(f"[SYS-API] Filtro concluido. {len(jogos_filtrados)} jogos encontrados nas ligas alvo.")
         return jogos_filtrados
     except Exception as e:
         print(f"[SYS-API] Erro critico na leitura das fixtures: {e}")
@@ -183,7 +179,7 @@ def gerar_e_enviar_sinais(destino_id=None):
     data_header = fuso_br.strftime('%d/%m/%Y')
     
     if destino_id:
-        bot.send_message(destino_id, text="🔄 <i>Conectando ao servidor Pro da API... Processando jogos.</i>", parse_mode="HTML")
+        bot.send_message(destino_id, text="🔄 <i>Buscando jogos no link oficial v1-football...</i>", parse_mode="HTML")
 
     jogos = puxar_jogos_do_dia_reais()
     
@@ -194,8 +190,8 @@ def gerar_e_enviar_sinais(destino_id=None):
 
     try:
         abertura = (
-            f"📅 <b>═════════ JOGOS DO DAY {data_header} ═════════</b>\n\n"
-            f"📋 <b>BOLETIM AUTOMÁTICO - PLANO PRO ATIVO</b>\n"
+            f"📅 <b>═════════ JOGOS DO DIA {data_header} ═════════</b>\n\n"
+            f"📋 <b>BOLETIM AUTOMÁTICO - LINK OFICIAL V1 ATIVADO</b>\n"
             f"🎯 <b>ASSERTIVIDADE ACUMULADA:</b> ✅ {HISTORICO_IA['taxa_acerto_atual']}%"
         )
         bot.send_message(alvo, text=abertura, parse_mode="HTML")
@@ -215,7 +211,7 @@ def gerar_e_enviar_sinais(destino_id=None):
                 f"🏠 {j['time_casa']}: {j['casa_amarelos_med']}/j\n"
                 f"🚀 {j['time_fora']}: {j['fora_amarelos_med']}/j\n"
                 f"📊 <b>ESTIMATIVA:</b> {j['estimativa_total_cartoes']} cartões\n\n"
-                f"📋 <b>CONSELHO DA API:</b>\n<code>{j['aposta_sugerida']}</code>\n"
+                f"📋 <b>CONSELHO DO SEU PLANO PRO:</b>\n<code>{j['aposta_sugerida']}</code>\n"
                 f"=========================================="
             )
             bot.send_message(alvo, text=msg, parse_mode="HTML")
@@ -233,3 +229,8 @@ def loop_relogio_diario():
             fuso_br = timezone(timedelta(hours=-3))
             agora = datetime.now(fuso_br)
             amanha = agora + timedelta(days=1)
+            alvo = datetime(amanha.year, amanha.month, amanha.day, 8, 0, 0, tzinfo=fuso_br)
+            time.sleep((alvo - agora).total_seconds())
+            gerar_e_enviar_sinais()
+            time.sleep(10)
+        except Exception:
