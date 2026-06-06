@@ -51,16 +51,25 @@ def puxar_jogos_do_dia_reais():
         return []
 
     hoje_br = datetime.now(timezone(timedelta(hours=-3)))
-    data_api = hoje_br.strftime('%Y-%m-%d')  # Formato aceito pela API: AAAA-MM-DD
+    data_api = hoje_br.strftime('%Y-%m-%d')
     
     url = f"https://api-sports.io{data_api}"
+    
+    # Adicionado User-Agent para evitar o bloqueio de rota do Cloudflare no Render
     headers = {
         'x-apisports-key': API_KEY,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     }
     
     try:
         response = requests.get(url, headers=headers, timeout=15)
+        
+        # Validação se a resposta veio em formato HTML (Bloqueio) em vez de JSON
+        if "data-next-head" in response.text or "<html" in response.text.lower():
+            print("[API-ERR] Resposta HTTP recebida em HTML. Bloqueio de rota Cloudflare ativo.")
+            return []
+            
         if response.status_code != 200:
             print(f"[SYS-API] Erro HTTP {response.status_code}: {response.text}")
             return []
@@ -73,11 +82,9 @@ def puxar_jogos_do_dia_reais():
             league_info = f.get('league', {})
             league_id = league_info.get('id')
             
-            # Filtra apenas os jogos pertencentes as ligas que voce configurou
             if league_id in LIGAS_ALVO:
                 fixture_info = f.get('fixture', {})
                 
-                # Conversao segura do fuso horario UTC para America/Sao_Paulo (-3)
                 utc_time = datetime.strptime(fixture_info.get('date'), "%Y-%m-%dT%H:%M:%S%z")
                 br_time = utc_time.astimezone(timezone(timedelta(hours=-3)))
                 
@@ -187,7 +194,6 @@ def gerar_e_enviar_sinais(destino_id=None):
 
 def loop_relogio_diario():
     print("[CRON] Daemon agendador ativo.")
-    # Executa uma vez logo ao ligar o script para testar o sistema
     atualizar_inteligencia_diaria()
     gerar_e_enviar_sinais()
     
@@ -197,7 +203,6 @@ def loop_relogio_diario():
             agora = datetime.now(fuso_br)
             amanha = agora + timedelta(days=1)
             
-            # CONFIGURAÇÃO DE HORÁRIO: Configurado para disparar às 08:00:00 da manhã
             alvo = datetime(amanha.year, amanha.month, amanha.day, 8, 0, 0, tzinfo=fuso_br)
             
             tempo_espera = (alvo - agora).total_seconds()
@@ -214,5 +219,3 @@ def loop_relogio_diario():
 def escutar_comandos_telegram():
     if not bot:
         return
-    @bot.message_handler(commands=['hoje', 'sinais'])
-    def demand_reply(message):
