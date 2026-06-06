@@ -55,7 +55,6 @@ def puxar_jogos_do_dia_reais():
     
     url = f"https://api-sports.io{data_api}"
     
-    # Adicionado User-Agent para evitar o bloqueio de rota do Cloudflare no Render
     headers = {
         'x-apisports-key': API_KEY,
         'Content-Type': 'application/json',
@@ -65,7 +64,6 @@ def puxar_jogos_do_dia_reais():
     try:
         response = requests.get(url, headers=headers, timeout=15)
         
-        # Validação se a resposta veio em formato HTML (Bloqueio) em vez de JSON
         if "data-next-head" in response.text or "<html" in response.text.lower():
             print("[API-ERR] Resposta HTTP recebida em HTML. Bloqueio de rota Cloudflare ativo.")
             return []
@@ -132,6 +130,8 @@ def gerar_e_enviar_sinais(destino_id=None):
     
     if not jogos:
         print("[SYS-IA] Nenhum jogo encontrado para as ligas selecionadas hoje.")
+        if destino_id:
+            bot.send_message(destino_id, text="⚠️ <i>Nenhum jogo encontrado para as ligas configuradas hoje.</i>", parse_mode="HTML")
         return
 
     try:
@@ -216,6 +216,5 @@ def loop_relogio_diario():
             print(f"[CRON-ERR] Loop de agendamento reiniciado: {e}")
             time.sleep(30)
 
-def escutar_comandos_telegram():
-    if not bot:
-        return
+# Inicialização dos comandos do Bot usando escuta em Thread estável
+if bot:
