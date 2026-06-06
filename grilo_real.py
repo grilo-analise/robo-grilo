@@ -69,7 +69,6 @@ def buscar_predicao_real(fixture_id):
         if res.status_code == 200:
             dados_api = res.json().get('response', [])
             if dados_api and len(dados_api) > 0:
-                # CORREÇÃO CRÍTICA: Captura o primeiro objeto de forma segura dentro do array retornado da API
                 dados_primeiros = dados_api[0]
                 pred = dados_primeiros.get('predictions', {})
                 goals = dados_primeiros.get('goals', {})
@@ -226,7 +225,7 @@ def loop_relogio_diario():
     print("[CRON] Monitor automático iniciado com sucesso.")
     carregar_historico()
     
-    # Aguarda 15 segundos iniciais e realiza um disparo automático imediato de teste
+    # Executa um envio de teste inicial 15 segundos após ligar
     time.sleep(15) 
     gerar_e_enviar_sinais()
     
@@ -234,7 +233,11 @@ def loop_relogio_diario():
         try:
             fuso_br = timezone(timedelta(hours=-3))
             agora = datetime.now(fuso_br)
-            # Varredura agendada para acontecer rigorosamente às 06:00 da manhã de Brasília
+            
+            # Envio programado para as 06:00 da manhã (Horário de Brasília)
             if agora.hour == 6 and agora.minute == 0:
                 gerar_e_enviar_sinais()
                 time.sleep(60)
+            
+            time.sleep(30)
+        except Exception as e:
