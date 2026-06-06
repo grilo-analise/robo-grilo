@@ -16,7 +16,7 @@ sys.stdout.reconfigure(line_buffering=True)
 TOKEN = os.environ.get('TELEGRAM_TOKEN', '').strip()
 CHAT_ID = os.environ.get('CHAT_SINAIS_ID', '').strip()
 API_KEY = os.environ.get('API_FOOTBALL_KEY', '').strip()
-LIGAS_ALVO = [int(x) for x in os.environ.get('LEAGUE_IDS', '135').split(',') if x.strip()]
+LIGAS_ALVO = [int(x) for x in os.environ.get('LEAGUE_IDS', '1,39,140,78,88,135').split(',') if x.strip()]
 
 bot = telebot.TeleBot(TOKEN) if TOKEN else None
 app = Flask(__name__)
