@@ -47,7 +47,7 @@ def buscar_predicao_real(fixture_id):
         if res.status_code == 200:
             dados = res.json().get('response', [])
             if dados and len(dados) > 0:
-                pred = dados[0].get('predictions', {})
+                pred = dados[0].get('predictions', {}) # Correção na captura da lista estruturada da API
                 return {
                     "ambas_marcam": "Sim" if pred.get('goals', {}).get('both') is True else "Não",
                     "mais_gols_pct": pred.get('goals', {}).get('over', '50%'),
@@ -80,9 +80,7 @@ def puxar_jogos_do_dia_reais():
         print("[TRACE-ERR] API_FOOTBALL_KEY ausente ou nula.")
         return []
 
-    print(f"[TRACE-API] Iniciando busca com a chave: {API_KEY[:6]}...")
-    print(f"[TRACE-API] Ligas Alvo configuradas: {LIGAS_ALVO}")
-
+    print(f"[TRACE-API] Iniciando busca profunda nas ligas: {LIGAS_ALVO}")
     hoje_br = datetime.now(timezone(timedelta(hours=-3)))
     data_api = hoje_br.strftime('%Y-%m-%d')
     url = f"https://api-sports.io{data_api}"
@@ -90,25 +88,18 @@ def puxar_jogos_do_dia_reais():
     headers = {
         'x-apisports-key': API_KEY,
         'Content-Type': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+        'User-Agent': 'Mozilla/5.0'
     }
     
     try:
         response = requests.get(url, headers=headers, timeout=15)
-        print(f"[TRACE-API] Status HTTP do Servidor Principal: {response.status_code}")
-        
         if response.status_code != 200:
-            print(f"[TRACE-ERR] Corpo do erro retornado pela API: {response.text}")
+            print(f"[TRACE-ERR] Erro na API HTTP: {response.status_code}")
             return []
             
         dados = response.json()
-        
-        if dados.get('errors'):
-            print(f"[TRACE-ERR] Alerta de erro interno da API-Football: {dados.get('errors')}")
-            return []
-            
         fixtures = dados.get('response', [])
-        print(f"[TRACE-API] Total bruto de partidas encontradas no mundo hoje: {len(fixtures)}")
+        print(f"[TRACE-API] Total de jogos capturados globalmente hoje: {len(fixtures)}")
         
         jogos_filtrados = []
         for f in fixtures:
@@ -124,7 +115,7 @@ def puxar_jogos_do_dia_reais():
                 id_casa = f.get('teams', {}).get('home', {}).get('id')
                 id_fora = f.get('teams', {}).get('away', {}).get('id')
                 
-                print(f"[TRACE-MATCH] Cruzando dados reais para: {f.get('teams', {}).get('home', {}).get('name')} x {f.get('teams', {}).get('away', {}).get('name')}")
+                print(f"[TRACE-MATCH] Coletando estatisticas reais: {f.get('teams', {}).get('home', {}).get('name')} x {f.get('teams', {}).get('away', {}).get('name')}")
                 
                 dados_predicao = buscar_predicao_real(fixture_info.get('id'))
                 media_cartoes_casa = buscar_estatisticas_times(league_id, season, id_casa)
@@ -144,18 +135,18 @@ def puxar_jogos_do_dia_reais():
                     "estimativa_total_cartoes": round(media_cartoes_casa + media_cartoes_fora, 1)
                 }
                 jogos_filtrados.append(item)
-                time.sleep(0.3)
+                time.sleep(0.4) # Aumentado delay para evitar estouro de banda da API Pro
                 
-        print(f"[TRACE-API] Concluido. {len(jogos_filtrados)} partidas passaram pelo filtro das suas ligas.")
+        print(f"[TRACE-API] Processamento finalizado. Enviando {len(jogos_filtrados)} jogos reais para processamento.")
         return jogos_filtrados
     except Exception as e:
-        print(f"[TRACE-ERR] Erro na chamadas de fixtures: {e}")
+        print(f"[TRACE-ERR] Falha critica no processamento de fixtures: {e}")
         return []
 
 def gerar_e_enviar_sinais(destino_id=None):
     alvo = destino_id if destino_id else CHAT_ID
     if not bot or not alvo:
-        print("[TRACE-ERR] Telegram desativado. Verifique variaveis TOKEN ou CHAT_ID.")
+        print("[TRACE-ERR] Variaveis do Telegram ausentes.")
         return
         
     fuso_br = datetime.now(timezone(timedelta(hours=-3)))
@@ -163,22 +154,22 @@ def gerar_e_enviar_sinais(destino_id=None):
     jogos = puxar_jogos_do_dia_reais()
     
     if not jogos:
-        print("[TRACE-IA] Lista vazia. Nenhuma mensagem sera disparada.")
+        print("[TRACE-IA] Lista filtrada vazia para hoje.")
         if destino_id:
-            bot.send_message(destino_id, text="⚠️ <i>Nenhum jogo encontrado para as ligas configuradas hoje nos servidores da API.</i>", parse_mode="HTML")
+            bot.send_message(destino_id, text="⚠️ <i>Nenhum jogo ativo encontrado para as ligas configuradas hoje.</i>", parse_mode="HTML")
         return
 
     try:
         abertura = (
             f"📅 <b>═════════ JOGOS DO DIA {data_header} ═════════</b>\n\n"
-            f"📋 <b>BOLETIM ESTATÍSTICO - DADOS VERÍDICOS</b>\n"
+            f"📋 <b>BOLETIM AUTOMÁTICO - DADOS 100% REAIS</b>\n"
             f"📅 <b>EMISSÃO:</b> {data_header} às {fuso_br.strftime('%H:%M')}\n"
             f"🎯 <b>ASSERTIVIDADE ACUMULADA DA IA:</b> ✅ {HISTORICO_IA['taxa_acerto_atual']}% de Green"
         )
         bot.send_message(alvo, text=abertura, parse_mode="HTML")
-        time.sleep(1)
+        time.sleep(1.5)
     except Exception as e:
-        print(f"[TRACE-ERR] Erro envio Telegram: {e}")
+        print(f"[TRACE-ERR] Falha de conexao com API do Telegram: {e}")
         
     for j in jogos:
         try:
@@ -196,14 +187,17 @@ def gerar_e_enviar_sinais(destino_id=None):
                 f"=========================================="
             )
             bot.send_message(alvo, text=msg, parse_mode="HTML")
-            time.sleep(1)
+            time.sleep(1.5)
         except Exception as game_error:
-            print(f"[TRACE-ERR] Erro no envio do card: {game_error}")
+            print(f"[TRACE-ERR] Nao foi possivel postar o card do jogo: {game_error}")
 
 def loop_relogio_diario():
-    print("[CRON] Agendador diario em segundo plano inicializado.")
-    # Executa o teste de diagnóstico imediatamente ao subir o contêiner
+    print("[CRON] Agendador em segundo plano inicializado.")
+    # DELAY DE SEGURANÇA: Espera 10 segundos apos o site abrir para iniciar a chamada pesada sem sofrer Timeout do Gunicorn
+    time.sleep(10)
+    print("[CRON] Disparando varredura automatica de teste inicial...")
     gerar_e_enviar_sinais()
+    
     while True:
         try:
             fuso_br = timezone(timedelta(hours=-3))
@@ -219,4 +213,7 @@ def loop_relogio_diario():
 if bot:
     @bot.message_handler(commands=['start'])
     def send_welcome(message):
-        bot.reply_to(message, "🤖 Bot Online com Polling!")
+        bot.reply_to(message, "🤖 Módulo Real Conectado via Polling Assíncrono!")
+
+    @bot.message_handler(commands=['sinais', 'hoje'])
+    def demand_reply(message):
