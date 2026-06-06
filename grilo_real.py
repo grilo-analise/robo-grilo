@@ -229,3 +229,4 @@ def iniciar_escuta_bot():
         t_manual.start()
 
     print("[TG] Escuta contínua de comandos iniciada.")
+    
