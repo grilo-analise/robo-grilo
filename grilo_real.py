@@ -44,7 +44,6 @@ def salvar_historico():
         print(f"[SYS-IA] Erro gravacao: {e}")
 
 def buscar_predicao_real(fixture_id):
-    """Busca as probabilidades e previsões matemáticas reais do endpoint de Predictions"""
     url = f"https://api-sports.io{fixture_id}"
     headers = {'x-apisports-key': API_KEY, 'Content-Type': 'application/json'}
     try:
@@ -54,16 +53,15 @@ def buscar_predicao_real(fixture_id):
             if dados and len(dados) > 0:
                 pred = dados[0].get('predictions', {})
                 return {
-                    "ambas_marcam": pred.get('goals', {}).get('both', '50%'),
+                    "ambas_marcam": "Sim" if pred.get('goals', {}).get('both') is True else "Não",
                     "mais_gols_pct": pred.get('goals', {}).get('over', '50%'),
-                    "conselho": pred.get('advice', 'Analise pre-live padrao')
+                    "conselho": dados[0].get('recommendation', 'Analise de tendencia ativa')
                 }
     except Exception as e:
         print(f"[API-PRED-ERR] Falha ao coletar previsao: {e}")
-    return {"ambas_marcam": "50%", "mais_gols_pct": "50%", "conselho": "Analisar comportamento tatico ao vivo."}
+    return {"ambas_marcam": "N/A", "mais_gols_pct": "N/A", "conselho": "Analisar comportamento tatico ao vivo."}
 
 def buscar_estatisticas_times(league_id, season, team_id):
-    """Busca as médias históricas de cartões de uma equipe na competição atual"""
     url = f"https://api-sports.io{league_id}&season={season}&team={team_id}"
     headers = {'x-apisports-key': API_KEY, 'Content-Type': 'application/json'}
     try:
@@ -82,7 +80,6 @@ def buscar_estatisticas_times(league_id, season, team_id):
     return 2.0
 
 def puxar_jogos_do_dia_reais():
-    """Busca as partidas programadas coletando referências para consultas profundas"""
     if not API_KEY:
         print("[SYS-API] Erro: API_FOOTBALL_KEY nao configurada.")
         return []
@@ -139,7 +136,7 @@ def puxar_jogos_do_dia_reais():
                     "estimativa_total_cartoes": round(media_cartoes_casa + media_cartoes_fora, 1)
                 }
                 jogos_filtrados.append(item)
-                time.sleep(0.3)
+                time.sleep(0.2)
                 
         print(f"[SYS-API] Sincronizacao concluida. {len(jogos_filtrados)} jogos integrados com dados reais.")
         return jogos_filtrados
@@ -188,8 +185,8 @@ def gerar_e_enviar_sinais(destino_id=None):
                 f"⚔️ <b>PARTIDA:</b> <b>{j['time_casa']}</b> x <b>{j['time_fora']}</b>\n"
                 f"📆 <b>DATA DO JOGO:</b> {data_header} às {j['horario']}\n"
                 f"⚽ <b>COMPETIÇÃO:</b> {j['pais']} - {j['liga_nome']}\n\n"
-                f"📊 <b>PROBABILIDADE AMBAS MARCAM:</b> {j['ambas_marcam_pct']}\n"
-                f"📈 <b>PROBABILIDADE +2.5 GOLS:</b> {j['mais_gols_pct']}\n\n"
+                f"📊 <b>AMBAS MARCAM:</b> {j['ambas_marcam_pct']}\n"
+                f"📈 <b>TENDÊNCIA +2.5 GOLS:</b> {j['mais_gols_pct']}\n\n"
                 f"🟨 <b>MÉDIA HISTÓRICA DE CARTÕES AMARELOS:</b>\n"
                 f"🏠 {j['time_casa']}: {j['casa_amarelos_med']} por jogo\n"
                 f"🚀 {j['time_fora']}: {j['fora_amarelos_med']} por jogo\n"
@@ -222,6 +219,8 @@ def loop_relogio_diario():
             print(f"[CRON-ERR] Reiniciando agendador: {e}")
             time.sleep(30)
 
-def escutar_comandos_telegram():
-    if not bot:
-        return
+# Inicialização Absoluta de Handlers Globais (Fora do Polling Bloqueante)
+if bot:
+    @bot.message_handler(commands=['start'])
+    def send_welcome(message):
+        bot.reply_to(message, "🤖 <b>Módulo Estatístico Ativo!</b>\nUse /sinais para gerar análises reais.", parse_mode="HTML")
