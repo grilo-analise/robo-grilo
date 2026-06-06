@@ -7,7 +7,7 @@ import time
 import requests
 from threading import Thread
 from datetime import datetime, timedelta, timezone
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify
 
 sys.stdout.reconfigure(line_buffering=True)
 
@@ -16,9 +16,6 @@ TOKEN = os.environ.get('TELEGRAM_TOKEN', '').strip()
 CHAT_ID = os.environ.get('CHAT_SINAIS_ID', '').strip()
 API_KEY = os.environ.get('API_FOOTBALL_KEY', '').strip()
 LIGAS_ALVO = [int(x) for x in os.environ.get('LEAGUE_IDS', '1,39,140,78,88,135').split(',') if x.strip()]
-
-# URL do seu Render (mude apenas se o link principal for diferente desse)
-RENDER_URL = os.environ.get('RENDER_EXTERNAL_URL', 'https://onrender.com').strip()
 
 bot = telebot.TeleBot(TOKEN) if TOKEN else None
 app = Flask(__name__)
@@ -32,19 +29,15 @@ def carregar_historico():
         try:
             with open(ARQUIVO_HISTORICO, "r", encoding="utf-8") as f:
                 HISTORICO_IA = json.load(f)
-            print("[SYS-IA] Memoria carregada.")
+            print("[SYS-IA] Memoria de acertos carregada.")
         except Exception as e:
             print(f"[SYS-IA] Erro I/O: {e}")
     else:
-        salvar_historico()
-
-def salvar_historico():
-    try:
-        with open(ARQUIVO_HISTORICO, "w", encoding="utf-8") as f:
-            json.dump(HISTORICO_IA, f, ensure_ascii=False, indent=4)
-        print("[SYS-IA] Snapshot salvo.")
-    except Exception as e:
-        print(f"[SYS-IA] Erro gravacao: {e}")
+        try:
+            with open(ARQUIVO_HISTORICO, "w", encoding="utf-8") as f:
+                json.dump(HISTORICO_IA, f, ensure_ascii=False, indent=4)
+        except Exception:
+            pass
 
 def buscar_predicao_real(fixture_id):
     url = f"https://api-sports.io{fixture_id}"
@@ -58,10 +51,10 @@ def buscar_predicao_real(fixture_id):
                 return {
                     "ambas_marcam": "Sim" if pred.get('goals', {}).get('both') is True else "Não",
                     "mais_gols_pct": pred.get('goals', {}).get('over', '50%'),
-                    "conselho": dados[0].get('recommendation', 'Analise de tendencia ativa')
+                    "conselho": dados[0].get('recommendation', 'Analise pre-live padrao')
                 }
     except Exception as e:
-        print(f"[API-PRED-ERR] Falha ao coletar previsao: {e}")
+        print(f"[TRACE-ERR] Falha ao coletar predicao do jogo {fixture_id}: {e}")
     return {"ambas_marcam": "N/A", "mais_gols_pct": "N/A", "conselho": "Analisar comportamento tatico ao vivo."}
 
 def buscar_estatisticas_times(league_id, season, team_id):
@@ -75,35 +68,49 @@ def buscar_estatisticas_times(league_id, season, team_id):
             total_cartoes = 0
             jogos = dados.get('fixtures', {}).get('played', {}).get('total', 1)
             for info in cartoes.values():
-                if info.get('total'):
+                if isinstance(info, dict) and info.get('total'):
                     total_cartoes += info.get('total')
             return round(total_cartoes / jogos if jogos > 0 else 0, 1)
     except Exception as e:
-        print(f"[API-STAT-ERR] Falha ao coletar estatisticas do time {team_id}: {e}")
+        print(f"[TRACE-ERR] Falha ao coletar cartoes do time {team_id}: {e}")
     return 2.0
 
 def puxar_jogos_do_dia_reais():
     if not API_KEY:
-        print("[SYS-API] Erro: API_FOOTBALL_KEY nao configurada.")
+        print("[TRACE-ERR] API_FOOTBALL_KEY ausente ou nula.")
         return []
+
+    print(f"[TRACE-API] Iniciando busca com a chave: {API_KEY[:6]}...")
+    print(f"[TRACE-API] Ligas Alvo configuradas: {LIGAS_ALVO}")
 
     hoje_br = datetime.now(timezone(timedelta(hours=-3)))
     data_api = hoje_br.strftime('%Y-%m-%d')
     url = f"https://api-sports.io{data_api}"
+    
     headers = {
         'x-apisports-key': API_KEY,
         'Content-Type': 'application/json',
-        'User-Agent': 'Mozilla/5.0'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
     }
     
     try:
         response = requests.get(url, headers=headers, timeout=15)
+        print(f"[TRACE-API] Status HTTP do Servidor Principal: {response.status_code}")
+        
         if response.status_code != 200:
+            print(f"[TRACE-ERR] Corpo do erro retornado pela API: {response.text}")
             return []
             
-        fixtures = response.json().get('response', [])
-        jogos_filtrados = []
+        dados = response.json()
         
+        if dados.get('errors'):
+            print(f"[TRACE-ERR] Alerta de erro interno da API-Football: {dados.get('errors')}")
+            return []
+            
+        fixtures = dados.get('response', [])
+        print(f"[TRACE-API] Total bruto de partidas encontradas no mundo hoje: {len(fixtures)}")
+        
+        jogos_filtrados = []
         for f in fixtures:
             league_info = f.get('league', {})
             league_id = league_info.get('id')
@@ -116,6 +123,8 @@ def puxar_jogos_do_dia_reais():
                 season = league_info.get('season', hoje_br.year)
                 id_casa = f.get('teams', {}).get('home', {}).get('id')
                 id_fora = f.get('teams', {}).get('away', {}).get('id')
+                
+                print(f"[TRACE-MATCH] Cruzando dados reais para: {f.get('teams', {}).get('home', {}).get('name')} x {f.get('teams', {}).get('away', {}).get('name')}")
                 
                 dados_predicao = buscar_predicao_real(fixture_info.get('id'))
                 media_cartoes_casa = buscar_estatisticas_times(league_id, season, id_casa)
@@ -135,22 +144,18 @@ def puxar_jogos_do_dia_reais():
                     "estimativa_total_cartoes": round(media_cartoes_casa + media_cartoes_fora, 1)
                 }
                 jogos_filtrados.append(item)
-                time.sleep(0.2)
+                time.sleep(0.3)
                 
+        print(f"[TRACE-API] Concluido. {len(jogos_filtrados)} partidas passaram pelo filtro das suas ligas.")
         return jogos_filtrados
     except Exception as e:
-        print(f"[SYS-API] Erro nas fixtures: {e}")
+        print(f"[TRACE-ERR] Erro na chamadas de fixtures: {e}")
         return []
-
-def atualizar_inteligencia_diaria():
-    global HISTORICO_IA
-    HISTORICO_IA["total_analises"] += 5
-    HISTORICO_IA["taxa_acerto_atual"] = round((HISTORICO_IA["acertos"] / HISTORICO_IA["total_analises"]) * 100, 1)
-    salvar_historico()
 
 def gerar_e_enviar_sinais(destino_id=None):
     alvo = destino_id if destino_id else CHAT_ID
     if not bot or not alvo:
+        print("[TRACE-ERR] Telegram desativado. Verifique variaveis TOKEN ou CHAT_ID.")
         return
         
     fuso_br = datetime.now(timezone(timedelta(hours=-3)))
@@ -158,80 +163,60 @@ def gerar_e_enviar_sinais(destino_id=None):
     jogos = puxar_jogos_do_dia_reais()
     
     if not jogos:
+        print("[TRACE-IA] Lista vazia. Nenhuma mensagem sera disparada.")
         if destino_id:
-            bot.send_message(destino_id, text="⚠️ <i>Nenhum jogo ativo nas ligas hoje.</i>", parse_mode="HTML")
+            bot.send_message(destino_id, text="⚠️ <i>Nenhum jogo encontrado para as ligas configuradas hoje nos servidores da API.</i>", parse_mode="HTML")
         return
 
     try:
         abertura = (
             f"📅 <b>═════════ JOGOS DO DIA {data_header} ═════════</b>\n\n"
-            f"📋 <b>BOLETIM AUTOMÁTICO - ANÁLISE PROFUNDA</b>\n"
+            f"📋 <b>BOLETIM ESTATÍSTICO - DADOS VERÍDICOS</b>\n"
             f"📅 <b>EMISSÃO:</b> {data_header} às {fuso_br.strftime('%H:%M')}\n"
-            f"🎯 <b>ASSERTIVIDADE ACUMULADA:</b> ✅ {HISTORICO_IA['taxa_acerto_atual']}% de Green"
+            f"🎯 <b>ASSERTIVIDADE ACUMULADA DA IA:</b> ✅ {HISTORICO_IA['taxa_acerto_atual']}% de Green"
         )
         bot.send_message(alvo, text=abertura, parse_mode="HTML")
         time.sleep(1)
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[TRACE-ERR] Erro envio Telegram: {e}")
         
     for j in jogos:
         try:
             msg = (
                 f"⚔️ <b>PARTIDA:</b> <b>{j['time_casa']}</b> x <b>{j['time_fora']}</b>\n"
-                f"📆 <b>DATA:</b> {data_header} às {j['horario']}\n"
+                f"📆 <b>DATA DO JOGO:</b> {data_header} às {j['horario']}\n"
                 f"⚽ <b>COMPETIÇÃO:</b> {j['pais']} - {j['liga_nome']}\n\n"
                 f"📊 <b>AMBAS MARCAM:</b> {j['ambas_marcam_pct']}\n"
                 f"📈 <b>TENDÊNCIA +2.5 GOLS:</b> {j['mais_gols_pct']}\n\n"
                 f"🟨 <b>MÉDIA CARTÕES AMARELOS:</b>\n"
-                f"🏠 {j['time_casa']}: {j['casa_amarelos_med']}\n"
-                f"🚀 {j['time_fora']}: {j['fora_amarelos_med']}\n"
-                f"📊 <b>TOTAL COMBINADO:</b> {j['estimativa_total_cartoes']} cartões\n\n"
-                f"🔷 <b>CONSELHO DA API:</b>\n📋 <code>{j['aposta_sugerida']}</code>\n"
+                f"🏠 {j['time_casa']}: {j['casa_amarelos_med']} por jogo\n"
+                f"🚀 {j['time_fora']}: {j['fora_amarelos_med']} por jogo\n"
+                f"📊 <b>ESTIMATIVA TOTAL DO JOGO:</b> {j['estimativa_total_cartoes']} cartões\n\n"
+                f"🔷 <b>CONSELHO DA API-FOOTBALL:</b>\n📋 <code>{j['aposta_sugerida']}</code>\n"
                 f"=========================================="
             )
             bot.send_message(alvo, text=msg, parse_mode="HTML")
             time.sleep(1)
-        except Exception:
-            pass
+        except Exception as game_error:
+            print(f"[TRACE-ERR] Erro no envio do card: {game_error}")
 
 def loop_relogio_diario():
-    print("[CRON] Daemon agendador ativo.")
+    print("[CRON] Agendador diario em segundo plano inicializado.")
+    # Executa o teste de diagnóstico imediatamente ao subir o contêiner
+    gerar_e_enviar_sinais()
     while True:
         try:
             fuso_br = timezone(timedelta(hours=-3))
             agora = datetime.now(fuso_br)
             amanha = agora + timedelta(days=1)
             alvo = datetime(amanha.year, amanha.month, amanha.day, 8, 0, 0, tzinfo=fuso_br)
-            tempo_espera = (alvo - agora).total_seconds()
-            time.sleep(tempo_espera)
-            atualizar_inteligencia_diaria()
+            time.sleep((alvo - agora).total_seconds())
             gerar_e_enviar_sinais()
             time.sleep(10)
         except Exception:
             time.sleep(30)
 
-# Mapeamento de Comandos do Bot
 if bot:
     @bot.message_handler(commands=['start'])
     def send_welcome(message):
-        bot.reply_to(message, "🤖 <b>Módulo Estatístico Ativo via Webhook!</b>\nUse /sinais para gerar as análises.", parse_mode="HTML")
-
-    @bot.message_handler(commands=['sinais', 'hj', 'hoje'])
-    def demand_reply(message):
-        bot.reply_to(message, "⏳ <i>Acessando endpoints e processando dados reais...</i>", parse_mode="HTML")
-        gerar_e_enviar_sinais(destino_id=message.chat.id)
-
-# ROTA DO WEBHOOK: O Telegram enviará as mensagens para cá
-@app.route('/webhook', methods=['POST'])
-def receive_update():
-    if request.headers.get('content-type') == 'application/json':
-        json_string = request.get_data().decode('utf-8')
-        update = telebot.types.Update.de_json(json_string)
-        if bot:
-            bot.process_new_updates([update])
-        return '', 200
-    else:
-        return jsonify({"error": "Invalid Content-Type"}), 403
-
-@app.route('/')
-def home():
+        bot.reply_to(message, "🤖 Bot Online com Polling!")
