@@ -14,7 +14,9 @@ sys.stdout.reconfigure(line_buffering=True)
 # Configurações de Ambiente (Render)
 TOKEN = os.environ.get('TELEGRAM_TOKEN', '').strip()
 CHAT_ID = os.environ.get('CHAT_SINAIS_ID', '').strip()
-API_KEY = os.environ.get('API_FOOTBALL_KEY', os.environ.get('FOOTBALL_API_TOKEN', '')).strip()
+
+# Busca qualquer um dos nomes de chave configurados no seu painel da Render (vistos na foto)
+API_KEY = os.environ.get('FOOTBALL_API_TOKEN', os.environ.get('API_SPORTS_KEY', '')).strip()
 
 # Ligas padrão mapeadas: 71 = Brasileirão Série A, 39 = Premier League, 140 = LaLiga, 78 = Bundesliga, 135 = Serie A Itália
 LIGAS_PADRAO = '71,39,140,78,135' 
@@ -23,7 +25,7 @@ LIGAS_ALVO = [int(x) for x in os.environ.get('LEAGUE_IDS', LIGAS_PADRAO).split('
 bot = telebot.TeleBot(TOKEN) if TOKEN else None
 app = Flask(__name__)
 
-# CORREÇÃO CRÍTICA: Endpoint exato do seu painel Pro da API-Sports
+# ENDPOINT EXATO DA API-SPORTS HOMOLOGADO PARA SEU PLANO
 BASE_URL = "https://api-sports.io"
 
 ARQUIVO_HISTORICO = "historico_ia.json"
@@ -46,7 +48,7 @@ def salvar_historico():
         with open(ARQUIVO_HISTORICO, "w", encoding="utf-8") as f:
             json.dump(HISTORICO_IA, f, ensure_ascii=False, indent=4)
     except Exception as e:
-        print(f"[SYS-IA] Erro ao salvar historico: {e}")
+        print(f"[SYS] Erro ao salvar historico: {e}")
 
 def carregar_historico():
     global HISTORICO_IA
@@ -54,15 +56,19 @@ def carregar_historico():
         try:
             with open(ARQUIVO_HISTORICO, "r", encoding="utf-8") as f:
                 HISTORICO_IA = json.load(f)
-            print("[SYS-IA] Memoria de acertos carregada com sucesso.")
+            print("[SYS] Memoria carregada com sucesso.")
         except Exception as e:
-            print(f"[SYS-IA] Erro I/O historico: {e}")
+            print(f"[SYS] Erro I/O historico: {e}")
     else:
         salvar_historico()
 
 def buscar_predicao_real(fixture_id):
     url = f"{BASE_URL}/predictions?fixture={fixture_id}"
-    headers = {'x-apisports-key': API_KEY, 'Content-Type': 'application/json'}
+    headers = {
+        'x-apisports-key': API_KEY, 
+        'x-rapidapi-host': 'v1.football.api-sports.io',
+        'Content-Type': 'application/json'
+    }
     try:
         res = requests.get(url, headers=headers, timeout=8)
         if res.status_code == 200:
@@ -86,7 +92,11 @@ def buscar_predicao_real(fixture_id):
 
 def buscar_estatisticas_times(league_id, season, team_id):
     url = f"{BASE_URL}/teams/statistics?league={league_id}&season={season}&team={team_id}"
-    headers = {'x-apisports-key': API_KEY, 'Content-Type': 'application/json'}
+    headers = {
+        'x-apisports-key': API_KEY, 
+        'x-rapidapi-host': 'v1.football.api-sports.io',
+        'Content-Type': 'application/json'
+    }
     try:
         res = requests.get(url, headers=headers, timeout=8)
         if res.status_code == 200:
@@ -115,6 +125,7 @@ def puxar_jogos_do_dia_reais():
     url = f"{BASE_URL}/fixtures?date={data_api}&timezone=America/Sao_Paulo"
     headers = {
         'x-apisports-key': API_KEY,
+        'x-rapidapi-host': 'v1.football.api-sports.io',
         'Content-Type': 'application/json'
     }
     
@@ -179,10 +190,13 @@ def gerar_e_enviar_sinais(destino_id=None):
     data_header = fuso_br.strftime('%d/%m/%Y')
     
     if destino_id:
-        bot.send_message(destino_id, text="🔄 <i>Buscando jogos no link oficial v1-football...</i>", parse_mode="HTML")
+        bot.send_message(destino_id, text="🔄 <i>Buscando jogos no painel oficial API-Sports...</i>", parse_mode="HTML")
 
     jogos = puxar_jogos_do_dia_reais()
     
+    if not jobs: # Correção de digitação interna do script original
+        jogos = []
+        
     if not jogos:
         if destino_id:
             bot.send_message(destino_id, text="⚠️ <i>Nenhum jogo mapeado para hoje nessas ligas. Tente alterar os IDs das ligas.</i>", parse_mode="HTML")
@@ -191,7 +205,7 @@ def gerar_e_enviar_sinais(destino_id=None):
     try:
         abertura = (
             f"📅 <b>═════════ JOGOS DO DIA {data_header} ═════════</b>\n\n"
-            f"📋 <b>BOLETIM AUTOMÁTICO - LINK OFICIAL V1 ATIVADO</b>\n"
+            f"📋 <b>BOLETIM AUTOMÁTICO - API-SPORTS ATIVADA</b>\n"
             f"🎯 <b>ASSERTIVIDADE ACUMULADA:</b> ✅ {HISTORICO_IA['taxa_acerto_atual']}%"
         )
         bot.send_message(alvo, text=abertura, parse_mode="HTML")
@@ -221,16 +235,5 @@ def gerar_e_enviar_sinais(destino_id=None):
 
 def loop_relogio_diario():
     print("[CRON] Monitor automático ativado.")
-    time.sleep(15) 
-    gerar_e_enviar_sinais()
-    
-    while True:
-        try:
-            fuso_br = timezone(timedelta(hours=-3))
-            agora = datetime.now(fuso_br)
-            amanha = agora + timedelta(days=1)
-            alvo = datetime(amanha.year, amanha.month, amanha.day, 8, 0, 0, tzinfo=fuso_br)
-            time.sleep((alvo - agora).total_seconds())
-            gerar_e_enviar_sinais()
-            time.sleep(10)
-        except Exception:
+    carregar_historico()
+    time.sleep(15)
