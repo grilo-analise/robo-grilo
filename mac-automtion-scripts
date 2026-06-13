@@ -1,0 +1,57 @@
+import os
+import csv
+import requests
+
+url = "https://er-api.com"
+
+print("🌎 ROBÔ FINANCEIRO GLOBAL - MODO REQUESTS")
+print(f"🌐 Conectando ao servidor de câmbio: {url}\n" + "="*60)
+
+headers = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+}
+
+# Tabela mundial padrão caso o site bloqueie a rede do Mac
+dados_reserva = {
+    "BRL": 5.45, "EUR": 0.92, "GBP": 0.78, "JPY": 158.20, 
+    "CAD": 1.37, "AUD": 1.51, "CHF": 0.89
+}
+
+moedas_nome = {
+    "BRL": "Real Brasileiro", "EUR": "Euro (Europa)", 
+    "GBP": "Libra Esterlina (Reino Unido)", "JPY": "Iene (Japão)", 
+    "CAD": "Dólar Canadense", "AUD": "Dólar Australiano", "CHF": "Franco Suíço"
+}
+
+try:
+    # Tenta puxar ao vivo com a biblioteca requests
+    resposta = requests.get(url, headers=headers, timeout=5)
+    if resposta.status_code == 200:
+        dados = resposta.json()
+        taxas = dados.get("rates", {})
+        print("✅ Dados ao vivo recebidos com sucesso!")
+    else:
+        print("⚠️ Servidor instável. Ativando tabela de reserva mundial...")
+        taxas = dados_reserva
+except Exception:
+    print("⚠️ Bloqueio de rede detectado. Ativando tabela de reserva mundial...")
+    taxas = dados_reserva
+
+caminho_desktop = os.path.expanduser("~/Desktop/cambio_mundial.csv")
+
+with open(caminho_desktop, mode='w', newline='', encoding='utf-8') as arquivo_csv:
+    escritor = csv.writer(arquivo_csv)
+    escritor.writerow(['Moeda', 'Nome', 'Valor em relacao ao Dolar ($1 USD)'])
+    
+    contador = 0
+    for sigla, nome in moedas_nome.items():
+        if sigla in taxas:
+            valor = taxas[sigla]
+            print(f"💱 {nome} ({sigla})")
+            print(f"💵 $1 USD = {valor:.2f} {sigla}")
+            print("-"*60)
+            escritor.writerow([sigla, nome, f"{valor:.2f}"])
+            contador += 1
+
+print(f"\n🚀 PROCESSO FINALIZADO!")
+print(f"📊 Planilha atualizada gerada na sua Mesa: cambio_mundial.csv")
